@@ -16,8 +16,8 @@ const REMOTE_IMAGE_DURATION_MS = 9000;
 const MAX_REMOTE_IMAGES = 12;
 const TICKER_SEP = " \u2022 ";
 const SETTINGS_REFRESH_MS = 5 * 1000;
-const ALERT_INTERVAL_MS = 5 * 60 * 1000;
-const ALERT_DURATION_MS = 30 * 1000;
+const ALERT_INTERVAL_MS = 60 * 60 * 1000;
+const ALERT_DURATION_MS = 60 * 1000;
 const ALERT_BEEP_INTERVAL_MS = 850;
 const ALERT_BEEP_MS = 260;
 const ALERT_BEEP_FREQ = 940;
@@ -224,8 +224,10 @@ function stopAlertBeeping() {
 }
 
 function formatAlertCountdown(msRemaining) {
-  const sec = Math.max(0, Math.ceil(msRemaining / 1000));
-  return `00:${String(sec).padStart(2, "0")}`;
+  const totalSec = Math.max(0, Math.ceil(msRemaining / 1000));
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  return `${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 }
 
 function updateAlertVisuals() {
