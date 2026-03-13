@@ -1,4 +1,4 @@
-const CACHE_NAME = "revival-signage-v27";
+const CACHE_NAME = "revival-signage-v28";
 const PRECACHE_URLS = [
   "./",
   "./index.html",

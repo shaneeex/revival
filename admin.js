@@ -5,14 +5,8 @@ const reloadBtn = document.getElementById("reload-btn");
 const savePlaylistBtn = document.getElementById("save-playlist-btn");
 const overlayToggleEl = document.getElementById("overlay-toggle");
 const saveSettingsBtn = document.getElementById("save-settings-btn");
-const apiBaseUrlEl = document.getElementById("api-base-url");
-const saveApiBaseBtn = document.getElementById("save-api-base-btn");
-
-const API_BASE_STORAGE_KEY = "signageApiBaseUrl";
-const RUNTIME_CONFIG_URL = "runtime-config.json";
 
 let playlist = [];
-let apiBaseUrl = "";
 let playlistWritable = true;
 
 function showStatus(text, isError = false) {
@@ -21,7 +15,7 @@ function showStatus(text, isError = false) {
 }
 
 async function requestJson(url, options) {
-  const response = await fetch(buildApiUrl(url), options);
+  const response = await fetch(url, options);
   const text = await response.text();
   let payload = {};
   try {
@@ -32,55 +26,11 @@ async function requestJson(url, options) {
 
   if (!response.ok) {
     if (response.status === 404) {
-      throw new Error("API not found (404). Set Backend API URL correctly.");
+      throw new Error("API not found (404).");
     }
     throw new Error(payload?.error || `${response.status} ${response.statusText}`);
   }
   return payload;
-}
-
-function normalizeApiBaseUrl(value) {
-  const raw = String(value || "").trim();
-  if (!raw) {
-    return "";
-  }
-  return raw.replace(/\/+$/, "");
-}
-
-function buildApiUrl(pathname) {
-  if (/^https?:\/\//i.test(pathname)) {
-    return pathname;
-  }
-  if (!apiBaseUrl) {
-    return pathname;
-  }
-  return `${apiBaseUrl}${pathname.startsWith("/") ? pathname : `/${pathname}`}`;
-}
-
-async function loadRuntimeConfigApiBase() {
-  try {
-    const response = await fetch(RUNTIME_CONFIG_URL, { cache: "no-store" });
-    if (!response.ok) {
-      return "";
-    }
-    const contentType = (response.headers.get("content-type") || "").toLowerCase();
-    if (!contentType.includes("application/json")) {
-      return "";
-    }
-    const payload = await response.json();
-    return normalizeApiBaseUrl(payload?.apiBaseUrl || "");
-  } catch {
-    return "";
-  }
-}
-
-async function initializeApiBase() {
-  const fromStorage = normalizeApiBaseUrl(window.localStorage.getItem(API_BASE_STORAGE_KEY));
-  const fromConfig = await loadRuntimeConfigApiBase();
-  apiBaseUrl = fromStorage || fromConfig || "";
-  if (apiBaseUrlEl) {
-    apiBaseUrlEl.value = apiBaseUrl;
-  }
 }
 
 function swapItems(from, to) {
@@ -259,22 +209,6 @@ saveSettingsBtn.addEventListener("click", async () => {
   }
 });
 
-saveApiBaseBtn.addEventListener("click", async () => {
-  apiBaseUrl = normalizeApiBaseUrl(apiBaseUrlEl.value);
-  if (apiBaseUrl) {
-    window.localStorage.setItem(API_BASE_STORAGE_KEY, apiBaseUrl);
-  } else {
-    window.localStorage.removeItem(API_BASE_STORAGE_KEY);
-  }
-
-  try {
-    await Promise.all([loadPlaylist(), loadSettings()]);
-    showStatus("Backend API URL applied.");
-  } catch (error) {
-    showStatus(error.message || "Backend API URL applied, but API check failed.", true);
-  }
-});
-
 overlayToggleEl.addEventListener("change", async () => {
   try {
     await saveSettings();
@@ -285,8 +219,6 @@ overlayToggleEl.addEventListener("change", async () => {
 });
 
 async function initAdmin() {
-  await initializeApiBase();
-
   try {
     await loadSettings();
   } catch (error) {
