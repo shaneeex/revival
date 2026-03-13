@@ -1,0 +1,24 @@
+[
+  {
+    "file": "video1.mp4",
+    "type": "video"
+  },
+  {
+    "file": "video2.mp4",
+    "type": "video"
+  },
+  {
+    "file": "video3.mp4",
+    "type": "video"
+  },
+  {
+    "file": "image1.png",
+    "type": "image",
+    "duration": 10000
+  },
+  {
+    "file": "image2.png",
+    "type": "image",
+    "duration": 10000
+  }
+]

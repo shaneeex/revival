@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Revival Signage Admin</title>
+  <link rel="stylesheet" href="admin.css" />
+</head>
+<body>
+  <main class="admin-shell">
+    <header class="admin-header">
+      <h1>Revival Signage Admin</h1>
+      <p>Upload media, manage playlist order, and control overlay behavior.</p>
+    </header>
+
+    <section class="card">
+      <h2>Overlay Control</h2>
+      <div class="row">
+        <label class="toggle-wrap" for="overlay-toggle">
+          <input id="overlay-toggle" type="checkbox" />
+          <span>Enable "Time Up" overlay</span>
+        </label>
+        <button id="save-settings-btn" type="button">Save Overlay Setting</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Upload Media</h2>
+      <form id="upload-form" class="upload-form">
+        <label>
+          Select files (images/videos)
+          <input id="upload-files" type="file" name="files" multiple accept="image/*,video/*" required />
+        </label>
+        <label>
+          Default image duration (ms)
+          <input id="upload-image-duration" type="number" min="1000" step="500" value="10000" />
+        </label>
+        <button type="submit">Upload and Add to Playlist</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Playlist</h2>
+        <div class="card-actions">
+          <button id="reload-btn" type="button">Reload</button>
+          <button id="save-playlist-btn" type="button">Save Playlist</button>
+        </div>
+      </div>
+      <div id="playlist-empty" class="muted hidden">No items in playlist.</div>
+      <div id="playlist-list" class="playlist-list"></div>
+    </section>
+
+    <div id="status" class="status" role="status" aria-live="polite"></div>
+  </main>
+
+  <script src="admin.js"></script>
+</body>
+</html>

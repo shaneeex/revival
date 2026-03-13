@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#8a182a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Revival Sports Signage</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700;800&family=Rajdhani:wght@500;700&family=Teko:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css?v=20260314c" />
+</head>
+<body>
+  <div class="stage">
+    <main class="totem-screen">
+      <header class="brand-section">
+        <img
+          class="brand-mark"
+          src="logos/revival.png"
+          onerror="this.onerror=null;this.src='logos/revival.jpg';"
+          alt="Revival Sports"
+        />
+        <h1 class="brand-title">REVIVAL SPORTS</h1>
+        <div id="screen-clock" class="screen-clock" aria-label="Current time">--:--</div>
+      </header>
+
+      <section id="main-section" aria-label="Uploaded Media">
+        <div class="media-frame">
+          <div id="media-container">
+            <div class="panel-message">Loading media playlist...</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="logo-section" aria-label="Partner Logos">
+        <div class="sponsor-text">Powered by</div>
+        <div class="logo-row">
+          <img src="logos/mib.jpg" onerror="this.onerror=null;this.src='logos/mib.png';" alt="MIB Logo" />
+          <img src="logos/revival.jpg" onerror="this.onerror=null;this.src='logos/revival.png';" alt="Revival Sports Logo" />
+        </div>
+      </section>
+
+      <section id="marquee-section" aria-label="Ticker Updates">
+        <div id="marquee-label" class="marquee-label">REVIVAL SPORTS</div>
+        <div class="marquee-window">
+          <div id="marquee-track" class="marquee-track">
+            <span class="marquee-text">Loading updates...</span>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="timeup-overlay" class="timeup-overlay" aria-hidden="true" role="alert" aria-live="assertive">
+    <div class="timeup-card">
+      <div class="timeup-attention">
+        <span class="timeup-dot"></span>
+        <span class="timeup-attention-text">BOOKING TIME ALERT</span>
+        <span id="timeup-countdown" class="timeup-countdown">00:30</span>
+      </div>
+      <div class="timeup-title">TIME IS UP!</div>
+      <div class="timeup-message">
+        <span class="timeup-message-line">Please Vacate the court for the next group.</span>
+        <span class="timeup-message-line timeup-thankyou-line">Thankyou</span>
+      </div>
+      <div class="timeup-progress">
+        <div id="timeup-progress-bar" class="timeup-progress-bar"></div>
+      </div>
+    </div>
+  </div>
+
+  <noscript>
+    <div class="noscript">
+      <div class="noscript-inner">Enable JavaScript to run the signage screen.</div>
+    </div>
+  </noscript>
+  <script src="script.js?v=20260314c"></script>
+</body>
+</html>
