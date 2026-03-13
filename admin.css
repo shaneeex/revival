@@ -55,6 +55,14 @@ body {
   gap: 10px;
 }
 
+.api-base-wrap {
+  display: grid;
+  gap: 6px;
+  min-width: min(560px, 100%);
+  color: var(--muted);
+  flex: 1;
+}
+
 .toggle-wrap {
   display: inline-flex;
   align-items: center;

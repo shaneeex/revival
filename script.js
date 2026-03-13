@@ -1,6 +1,8 @@
 const PLAYLIST_URL = "media/playlist.json";
 const PLAYLIST_API_URL = "/api/playlist";
 const SETTINGS_API_URL = "/api/settings";
+const RUNTIME_CONFIG_URL = "runtime-config.json";
+const API_BASE_STORAGE_KEY = "signageApiBaseUrl";
 const REMOTE_IMAGE_API = "https://revivalsports.mv/wp-json/wp/v2/media?per_page=20&media_type=image&_fields=source_url";
 const DEFAULT_IMAGE_MS = 10000;
 const DEFAULT_VIDEO_MAX_MS = 90000;
@@ -60,9 +62,53 @@ let alertEndAtMs = 0;
 let alertBeepTick = 0;
 let overlayEnabled = true;
 let overlayListenersBound = false;
+let apiBaseUrl = "";
 
 if (IS_ANDROID) {
   document.documentElement.classList.add("perf-mode");
+}
+
+function normalizeApiBaseUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return "";
+  }
+  return raw.replace(/\/+$/, "");
+}
+
+function buildApiUrl(pathname) {
+  if (/^https?:\/\//i.test(pathname)) {
+    return pathname;
+  }
+  if (!apiBaseUrl) {
+    return pathname;
+  }
+  return `${apiBaseUrl}${pathname.startsWith("/") ? pathname : `/${pathname}`}`;
+}
+
+async function loadRuntimeConfig() {
+  const fromStorage = normalizeApiBaseUrl(window.localStorage.getItem(API_BASE_STORAGE_KEY));
+  if (fromStorage) {
+    apiBaseUrl = fromStorage;
+    return;
+  }
+
+  try {
+    const response = await fetchWithTimeout(RUNTIME_CONFIG_URL, { cache: "no-store" });
+    if (!response.ok) {
+      return;
+    }
+
+    const contentType = (response.headers.get("content-type") || "").toLowerCase();
+    if (!contentType.includes("application/json")) {
+      return;
+    }
+
+    const payload = await response.json();
+    apiBaseUrl = normalizeApiBaseUrl(payload?.apiBaseUrl || "");
+  } catch (error) {
+    // Optional config; keep empty apiBaseUrl.
+  }
 }
 
 function updateClock() {
@@ -339,7 +385,7 @@ function applyOverlayEnabled(value) {
 
 async function refreshRuntimeSettings() {
   try {
-    const response = await fetchWithTimeout(SETTINGS_API_URL, { cache: "no-store" });
+    const response = await fetchWithTimeout(buildApiUrl(SETTINGS_API_URL), { cache: "no-store" });
     if (!response.ok) {
       return;
     }
@@ -514,7 +560,7 @@ function normalizeMediaItem(item) {
 }
 
 async function loadPlaylist() {
-  const sources = [PLAYLIST_API_URL, PLAYLIST_URL];
+  const sources = [buildApiUrl(PLAYLIST_API_URL), PLAYLIST_URL];
   let lastError = null;
 
   for (const source of sources) {
@@ -956,6 +1002,7 @@ async function refreshNews() {
 }
 
 async function init() {
+  await loadRuntimeConfig();
   await refreshRuntimeSettings();
   await loadPlaylist();
   await loadRemoteImages();

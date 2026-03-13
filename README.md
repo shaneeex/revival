@@ -55,11 +55,34 @@ On another device in same Wi-Fi (example IP):
 
 The signage frontend polls settings and applies overlay ON/OFF automatically.
 
+## If You See 404 In Admin
+
+If `/admin` shows `404` status messages, your frontend is likely hosted as static files without backend on same domain.
+
+Set backend URL using one of these:
+
+1. In `/admin`, set `Backend API URL` and click `Apply API URL` (stored in browser localStorage).
+2. Or set `apiBaseUrl` in `runtime-config.json` and redeploy.
+
+Example:
+
+```json
+{
+  "apiBaseUrl": "https://your-backend-domain.com"
+}
+```
+
+Then both admin and signage will call:
+
+- `https://your-backend-domain.com/api/playlist`
+- `https://your-backend-domain.com/api/settings`
+
 ## Media + Playlist Storage
 
 - Media files: `media/`
 - Playlist file: `media/playlist.json`
 - Runtime settings: `config/settings.json`
+- Runtime API config: `runtime-config.json`
 
 Playlist format:
 
