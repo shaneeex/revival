@@ -13,6 +13,7 @@ const RUNTIME_CONFIG_URL = "runtime-config.json";
 
 let playlist = [];
 let apiBaseUrl = "";
+let playlistWritable = true;
 
 function showStatus(text, isError = false) {
   statusEl.textContent = text;
@@ -182,12 +183,35 @@ function renderPlaylist() {
 }
 
 async function loadPlaylist() {
-  const payload = await requestJson("/api/playlist");
-  playlist = Array.isArray(payload?.items) ? payload.items : [];
+  try {
+    const payload = await requestJson("/api/playlist");
+    playlist = Array.isArray(payload?.items) ? payload.items : [];
+    playlistWritable = true;
+    savePlaylistBtn.disabled = false;
+    savePlaylistBtn.title = "";
+    renderPlaylist();
+    return;
+  } catch {
+    // Fallback for static hosting without playlist API.
+  }
+
+  const response = await fetch("media/playlist.json", { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("Playlist API unavailable and media/playlist.json not found.");
+  }
+  const payload = await response.json();
+  const rawItems = Array.isArray(payload) ? payload : payload?.items;
+  playlist = Array.isArray(rawItems) ? rawItems : [];
+  playlistWritable = false;
+  savePlaylistBtn.disabled = true;
+  savePlaylistBtn.title = "Save requires /api/playlist backend";
   renderPlaylist();
 }
 
 async function savePlaylist() {
+  if (!playlistWritable) {
+    throw new Error("Playlist save is disabled on this deployment.");
+  }
   await requestJson("/api/playlist", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -262,9 +286,20 @@ overlayToggleEl.addEventListener("change", async () => {
 
 async function initAdmin() {
   await initializeApiBase();
+
   try {
-    await Promise.all([loadPlaylist(), loadSettings()]);
-    showStatus("Admin loaded.");
+    await loadSettings();
+  } catch (error) {
+    showStatus(error.message || "Failed to load overlay settings", true);
+  }
+
+  try {
+    await loadPlaylist();
+    if (playlistWritable) {
+      showStatus("Admin loaded.");
+    } else {
+      showStatus("Overlay control active. Playlist is read-only on this deployment.");
+    }
   } catch (error) {
     showStatus(error.message || "Failed to load admin", true);
   }

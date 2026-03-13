@@ -80,6 +80,10 @@ Then both admin and signage will call:
 - `https://your-backend-domain.com/api/playlist`
 - `https://your-backend-domain.com/api/settings`
 
+Vercel-only shortcut:
+- This repo includes `api/settings.js` and `api/health.js` so overlay control can work on Vercel without a separate server.
+- For persistent overlay setting on Vercel, connect **Vercel KV** (env vars `KV_REST_API_URL` and `KV_REST_API_TOKEN`).
+
 ## Media + Playlist Storage
 
 - Media files: `media/`
