@@ -3,9 +3,6 @@ const playlistEmptyEl = document.getElementById("playlist-empty");
 const statusEl = document.getElementById("status");
 const reloadBtn = document.getElementById("reload-btn");
 const savePlaylistBtn = document.getElementById("save-playlist-btn");
-const uploadForm = document.getElementById("upload-form");
-const uploadFilesEl = document.getElementById("upload-files");
-const uploadImageDurationEl = document.getElementById("upload-image-duration");
 const overlayToggleEl = document.getElementById("overlay-toggle");
 const saveSettingsBtn = document.getElementById("save-settings-btn");
 const apiBaseUrlEl = document.getElementById("api-base-url");
@@ -260,34 +257,6 @@ overlayToggleEl.addEventListener("change", async () => {
     showStatus("Overlay setting updated.");
   } catch (error) {
     showStatus(error.message || "Save settings failed", true);
-  }
-});
-
-uploadForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-
-  if (!uploadFilesEl.files?.length) {
-    showStatus("Choose one or more files first.", true);
-    return;
-  }
-
-  const formData = new FormData();
-  for (const file of uploadFilesEl.files) {
-    formData.append("files", file);
-  }
-  formData.append("imageDuration", String(Math.max(1000, Number(uploadImageDurationEl.value) || 10000)));
-
-  try {
-    await requestJson("/api/media/upload", {
-      method: "POST",
-      body: formData
-    });
-    uploadForm.reset();
-    uploadImageDurationEl.value = "10000";
-    await loadPlaylist();
-    showStatus("Upload complete and playlist updated.");
-  } catch (error) {
-    showStatus(error.message || "Upload failed", true);
   }
 });
 

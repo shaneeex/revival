@@ -9,10 +9,13 @@ This project runs a signage display with:
 
 ## New Backend Features
 
-- Upload image/video files from a web admin panel
 - Reorder and edit playlist durations without editing JSON manually
 - Delete media files from disk
 - Toggle Time Up overlay ON/OFF from admin panel
+
+Cloudinary note:
+- You can use direct `https://...` Cloudinary media URLs in playlist items (`file` or `src`).
+- Upload UI is optional and can be skipped.
 
 ## Quick Start
 
@@ -97,7 +100,6 @@ Playlist format:
 
 - `GET /api/playlist`
 - `PUT /api/playlist`
-- `POST /api/media/upload` (multipart form, key: `files`)
 - `DELETE /api/media/:name`
 - `GET /api/settings`
 - `PUT /api/settings`
