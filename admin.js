@@ -178,6 +178,15 @@ saveSettingsBtn.addEventListener("click", async () => {
   }
 });
 
+overlayToggleEl.addEventListener("change", async () => {
+  try {
+    await saveSettings();
+    showStatus("Overlay setting updated.");
+  } catch (error) {
+    showStatus(error.message || "Save settings failed", true);
+  }
+});
+
 uploadForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 

@@ -13,7 +13,7 @@ const NEWS_TITLE_FONT_STEP_PX = 0.5;
 const REMOTE_IMAGE_DURATION_MS = 9000;
 const MAX_REMOTE_IMAGES = 12;
 const TICKER_SEP = " \u2022 ";
-const SETTINGS_REFRESH_MS = 15 * 1000;
+const SETTINGS_REFRESH_MS = 5 * 1000;
 const ALERT_INTERVAL_MS = 5 * 60 * 1000;
 const ALERT_DURATION_MS = 30 * 1000;
 const ALERT_BEEP_INTERVAL_MS = 850;
@@ -294,12 +294,31 @@ function scheduleAlignedOverlay() {
 
   const delay = getMsUntilNextAlignedAlert();
   alertAlignedTimeoutId = setTimeout(() => {
-    showTimeupOverlay();
+    void maybeShowTimeupOverlay();
 
     alertIntervalId = setInterval(() => {
-      showTimeupOverlay();
+      void maybeShowTimeupOverlay();
     }, ALERT_INTERVAL_MS);
   }, delay);
+}
+
+function parseOverlayEnabledValue(value) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["false", "0", "off", "no"].includes(normalized)) {
+      return false;
+    }
+    if (["true", "1", "on", "yes"].includes(normalized)) {
+      return true;
+    }
+  }
+  return true;
 }
 
 function applyOverlayEnabled(value) {
@@ -331,12 +350,17 @@ async function refreshRuntimeSettings() {
     }
 
     const payload = await response.json();
-    if (payload && typeof payload.overlayEnabled === "boolean") {
-      applyOverlayEnabled(payload.overlayEnabled);
+    if (payload && Object.prototype.hasOwnProperty.call(payload, "overlayEnabled")) {
+      applyOverlayEnabled(parseOverlayEnabledValue(payload.overlayEnabled));
     }
   } catch (error) {
     // Backend can be temporarily unavailable during restarts; keep existing setting.
   }
+}
+
+async function maybeShowTimeupOverlay() {
+  await refreshRuntimeSettings();
+  showTimeupOverlay();
 }
 
 function setupTimeupOverlay() {

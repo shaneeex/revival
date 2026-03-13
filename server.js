@@ -113,10 +113,29 @@ async function readSettings() {
 
 async function writeSettings(next) {
   const settings = {
-    overlayEnabled: next?.overlayEnabled !== false
+    overlayEnabled: parseBoolean(next?.overlayEnabled, true)
   };
   await writeJson(SETTINGS_FILE, settings);
   return settings;
+}
+
+function parseBoolean(value, fallback = true) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+  if (typeof value === "string") {
+    const v = value.trim().toLowerCase();
+    if (["false", "0", "off", "no"].includes(v)) {
+      return false;
+    }
+    if (["true", "1", "on", "yes"].includes(v)) {
+      return true;
+    }
+  }
+  return fallback;
 }
 
 async function fileExists(filePath) {
@@ -255,7 +274,7 @@ app.get("/api/settings", async (req, res) => {
 
 app.put("/api/settings", async (req, res) => {
   const settings = await writeSettings({
-    overlayEnabled: req.body?.overlayEnabled !== false
+    overlayEnabled: parseBoolean(req.body?.overlayEnabled, true)
   });
   res.json({ ok: true, ...settings });
 });
