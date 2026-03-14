@@ -3,7 +3,6 @@ const PLAYLIST_API_URL = "/api/playlist";
 const SETTINGS_API_URL = "/api/settings";
 const RUNTIME_CONFIG_URL = "runtime-config.json";
 const API_BASE_STORAGE_KEY = "signageApiBaseUrl";
-const REMOTE_IMAGE_API = "https://revivalsports.mv/wp-json/wp/v2/media?per_page=20&media_type=image&_fields=source_url";
 const DEFAULT_IMAGE_MS = 10000;
 const DEFAULT_VIDEO_MAX_MS = 90000;
 const MEDIA_SLIDES_PER_NEWS = 3;
@@ -13,8 +12,6 @@ const PLAYLIST_REFRESH_MS = 60 * 1000;
 const FETCH_TIMEOUT_MS = 12000;
 const NEWS_TITLE_MIN_FONT_PX = 16;
 const NEWS_TITLE_FONT_STEP_PX = 0.5;
-const REMOTE_IMAGE_DURATION_MS = 9000;
-const MAX_REMOTE_IMAGES = 12;
 const TICKER_SEP = " \u2022 ";
 const SETTINGS_REFRESH_MS = 5 * 1000;
 const ALERT_INTERVAL_MS = 60 * 60 * 1000;
@@ -785,58 +782,6 @@ async function loadPlaylist() {
   mediaContainer.innerHTML = '<div class="panel-message">Unable to load media playlist</div>';
 }
 
-async function loadRemoteImages() {
-  const encodedApi = encodeURIComponent(REMOTE_IMAGE_API);
-  const endpoints = [
-    REMOTE_IMAGE_API,
-    `https://api.allorigins.win/raw?url=${encodedApi}`,
-    `https://api.codetabs.com/v1/proxy?quest=${encodedApi}`
-  ];
-
-  let remotePayload = [];
-  try {
-    for (const endpoint of endpoints) {
-      try {
-        const response = await fetchWithTimeout(endpoint, { cache: "no-store" });
-        if (!response.ok) {
-          throw new Error(`Remote images HTTP ${response.status}`);
-        }
-
-        const payload = await response.json();
-        if (Array.isArray(payload) && payload.length) {
-          remotePayload = payload;
-          break;
-        }
-      } catch (error) {
-        console.warn("Remote image endpoint failed:", endpoint, error);
-      }
-    }
-
-    const remoteItems = remotePayload
-      .map((item) => (item?.source_url || "").trim())
-      .filter(Boolean)
-      .slice(0, MAX_REMOTE_IMAGES)
-      .map((src) => ({
-        src,
-        type: "image",
-        duration: REMOTE_IMAGE_DURATION_MS
-      }));
-
-    if (!remoteItems.length) {
-      return;
-    }
-
-    const knownSrc = new Set(mediaFiles.map((item) => item.src));
-    remoteItems.forEach((item) => {
-      if (!knownSrc.has(item.src)) {
-        mediaFiles.push(item);
-      }
-    });
-  } catch (error) {
-    console.warn("Remote image fetch failed:", error);
-  }
-}
-
 async function refreshMediaSources() {
   if (mediaRefreshInFlight) {
     return;
@@ -845,7 +790,6 @@ async function refreshMediaSources() {
   mediaRefreshInFlight = true;
   try {
     await loadPlaylist();
-    await loadRemoteImages();
     if (!mediaFiles.length || mediaIndex >= mediaFiles.length) {
       mediaIndex = 0;
     }
@@ -1031,35 +975,42 @@ function showMediaSlide() {
   }
 
   const imageDurationMs = item.duration || DEFAULT_IMAGE_MS;
-  const shell = document.createElement("div");
-  shell.className = "slide-item image-shell";
-  shell.style.setProperty("--img-motion-ms", `${Math.max(6000, imageDurationMs)}ms`);
+  const slide = document.createElement("article");
+  slide.className = "news-slide image-media-slide";
+
+  const imageBox = document.createElement("div");
+  imageBox.className = "news-slide-image-box";
 
   const img = document.createElement("img");
-  img.className = `image-item ${getNextImageMotionClass()}`;
+  img.className = `news-slide-image-item ${getNextNewsImageMotionClass()}`;
   img.src = item.src;
-  img.alt = "Signage media";
+  img.alt = "Signage image";
+  img.style.setProperty("--news-img-motion-ms", `${Math.max(12000, imageDurationMs)}ms`);
   img.addEventListener("error", () => scheduleNextSlide(400), { once: true });
-  shell.appendChild(img);
+  imageBox.appendChild(img);
 
-  const title = getImageSlideTitle(item);
-  if (title) {
-    const caption = document.createElement("div");
-    caption.className = "news-slide-headline image-news-headline";
+  const headline = document.createElement("div");
+  headline.className = "news-slide-headline";
 
-    const kicker = document.createElement("div");
-    kicker.className = "news-slide-kicker";
-    kicker.textContent = "GALLERY";
+  const kicker = document.createElement("div");
+  kicker.className = "news-slide-kicker";
+  kicker.textContent = "GALLERY";
 
-    const heading = document.createElement("h3");
-    heading.className = "news-slide-title image-news-title";
-    heading.textContent = title;
+  const heading = document.createElement("h2");
+  heading.className = "news-slide-title";
+  heading.textContent = getImageSlideTitle(item) || "REVIVAL SPORTS";
+  heading.style.setProperty("--news-title-lines", `${getNewsTitleLineClamp(heading.textContent)}`);
 
-    caption.append(kicker, heading);
-    shell.appendChild(caption);
-  }
+  headline.append(kicker, heading);
+  slide.append(imageBox, headline);
+  mediaContainer.appendChild(slide);
 
-  mediaContainer.appendChild(shell);
+  requestAnimationFrame(() => {
+    adjustNewsSlideLayout(slide, headline);
+    fitNewsTitleToBox(heading, headline, kicker);
+    adjustNewsSlideLayout(slide, headline);
+  });
+
   scheduleNextSlide(imageDurationMs);
 }
 
