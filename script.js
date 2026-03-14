@@ -2,7 +2,6 @@ const PLAYLIST_URL = "media/playlist.json";
 const PLAYLIST_API_URL = "/api/playlist";
 const SETTINGS_API_URL = "/api/settings";
 const RUNTIME_CONFIG_URL = "runtime-config.json";
-const API_BASE_STORAGE_KEY = "signageApiBaseUrl";
 const DEFAULT_IMAGE_MS = 10000;
 const DEFAULT_VIDEO_MAX_MS = 90000;
 const MEDIA_SLIDES_PER_NEWS = 3;
@@ -117,11 +116,6 @@ function buildApiUrl(pathname) {
 }
 
 async function loadRuntimeConfig() {
-  const fromStorage = normalizeApiBaseUrl(window.localStorage.getItem(API_BASE_STORAGE_KEY));
-  if (fromStorage) {
-    apiBaseUrl = fromStorage;
-  }
-
   try {
     const response = await fetchWithTimeout(RUNTIME_CONFIG_URL, { cache: "no-store" });
     if (!response.ok) {
@@ -134,9 +128,7 @@ async function loadRuntimeConfig() {
     }
 
     const payload = await response.json();
-    if (!fromStorage) {
-      apiBaseUrl = normalizeApiBaseUrl(payload?.apiBaseUrl || "");
-    }
+    apiBaseUrl = normalizeApiBaseUrl(payload?.apiBaseUrl || "");
     cloudinaryConfig = normalizeCloudinaryConfig(payload?.cloudinary);
   } catch (error) {
     // Optional config; keep empty apiBaseUrl.
@@ -716,7 +708,7 @@ async function loadCloudinaryPlaylist() {
 }
 
 async function loadPlaylist() {
-  // 1) Prefer managed playlist from backend (admin content list).
+  // Use managed playlist from backend so all clients (web + screen) stay in sync.
   try {
     const response = await fetchWithTimeout(buildApiUrl(PLAYLIST_API_URL), { cache: "no-store" });
     if (response.ok) {
@@ -736,50 +728,30 @@ async function loadPlaylist() {
     console.warn("Managed playlist load failed:", error);
   }
 
-  // 2) Fallback to Cloudinary tag list.
+  // Final fallback only if API is temporarily unavailable.
   try {
-    const usedCloudinary = await loadCloudinaryPlaylist();
-    if (usedCloudinary) {
-      if (!mediaFiles.length) {
-        mediaContainer.innerHTML = '<div class="panel-message">No Cloudinary media found for configured tag</div>';
-      }
-      return;
+    const response = await fetchWithTimeout(PLAYLIST_URL, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`Playlist HTTP ${response.status}`);
     }
+
+    const contentType = (response.headers.get("content-type") || "").toLowerCase();
+    if (!contentType.includes("application/json")) {
+      throw new Error("Fallback playlist is not JSON");
+    }
+
+    const payload = await response.json();
+    const rawItems = Array.isArray(payload) ? payload : payload.items;
+    mediaFiles = (rawItems || []).map(normalizeMediaItem).filter(Boolean);
+    if (!mediaFiles.length) {
+      mediaContainer.innerHTML = '<div class="panel-message">No media in fallback playlist</div>';
+    }
+    console.warn("Using fallback static playlist because API playlist is unavailable.");
+    return;
   } catch (error) {
-    console.warn("Cloudinary playlist load failed:", error);
+    console.error("Playlist load failed:", error);
+    mediaContainer.innerHTML = '<div class="panel-message">Unable to load media playlist</div>';
   }
-
-  // 3) Final fallback to static local playlist file.
-  const sources = [PLAYLIST_URL];
-  let lastError = null;
-
-  for (const source of sources) {
-    try {
-      const response = await fetchWithTimeout(source, { cache: "no-store" });
-      if (!response.ok) {
-        throw new Error(`Playlist HTTP ${response.status}`);
-      }
-
-      const contentType = (response.headers.get("content-type") || "").toLowerCase();
-      if (!contentType.includes("application/json")) {
-        throw new Error(`Playlist response from ${source} is not JSON`);
-      }
-
-      const payload = await response.json();
-      const rawItems = Array.isArray(payload) ? payload : payload.items;
-      mediaFiles = (rawItems || []).map(normalizeMediaItem).filter(Boolean);
-
-      if (!mediaFiles.length) {
-        mediaContainer.innerHTML = '<div class="panel-message">No media found in playlist</div>';
-      }
-      return;
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  console.error("Playlist load failed:", lastError);
-  mediaContainer.innerHTML = '<div class="panel-message">Unable to load media playlist</div>';
 }
 
 async function refreshMediaSources() {

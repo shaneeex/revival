@@ -1,5 +1,10 @@
+const { isAuthenticated, setCors } = require("./_lib/session");
+const { readJsonState, writeJsonState } = require("./_lib/persistence");
+
+const KV_KEY = "signage:overlayEnabled";
+const CLOUDINARY_STATE_KEY = "overlay-enabled";
+
 let inMemoryOverlayEnabled = true;
-const { isAuthenticated } = require("./_lib/session");
 
 function parseBoolean(value, fallback = true) {
   if (typeof value === "boolean") {
@@ -20,51 +25,40 @@ function parseBoolean(value, fallback = true) {
   return fallback;
 }
 
-function setCors(res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,PUT,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-}
-
-function getKvConfig() {
-  const baseUrl = process.env.KV_REST_API_URL || "";
-  const token = process.env.KV_REST_API_TOKEN || "";
-  if (!baseUrl || !token) {
-    return null;
-  }
-  return { baseUrl: baseUrl.replace(/\/+$/, ""), token };
-}
-
-async function kvGetOverlayEnabled() {
-  const kv = getKvConfig();
-  if (!kv) {
-    return null;
-  }
-
-  const response = await fetch(`${kv.baseUrl}/get/signage:overlayEnabled`, {
-    headers: { Authorization: `Bearer ${kv.token}` }
+async function readOverlaySettings() {
+  const state = await readJsonState({
+    kvKey: KV_KEY,
+    cloudinaryKey: CLOUDINARY_STATE_KEY,
+    memoryValue: inMemoryOverlayEnabled
   });
-  if (!response.ok) {
-    throw new Error(`KV GET failed (${response.status})`);
-  }
-  const payload = await response.json();
-  return payload?.result;
+
+  const overlayEnabled = parseBoolean(state.value, true);
+  inMemoryOverlayEnabled = overlayEnabled;
+
+  return {
+    overlayEnabled,
+    persistent: state.persistent,
+    writable: state.writable,
+    storage: state.storage
+  };
 }
 
-async function kvSetOverlayEnabled(value) {
-  const kv = getKvConfig();
-  if (!kv) {
-    return false;
-  }
+async function writeOverlaySettings(nextValue) {
+  const overlayEnabled = parseBoolean(nextValue, true);
+  inMemoryOverlayEnabled = overlayEnabled;
 
-  const response = await fetch(
-    `${kv.baseUrl}/set/signage:overlayEnabled/${encodeURIComponent(value ? "true" : "false")}`,
-    { method: "POST", headers: { Authorization: `Bearer ${kv.token}` } }
-  );
-  if (!response.ok) {
-    throw new Error(`KV SET failed (${response.status})`);
-  }
-  return true;
+  const state = await writeJsonState({
+    kvKey: KV_KEY,
+    cloudinaryKey: CLOUDINARY_STATE_KEY,
+    value: overlayEnabled
+  });
+
+  return {
+    overlayEnabled,
+    persistent: state.persistent,
+    writable: state.writable,
+    storage: state.storage
+  };
 }
 
 module.exports = async (req, res) => {
@@ -76,23 +70,9 @@ module.exports = async (req, res) => {
   }
 
   if (req.method === "GET") {
-    try {
-      const kvValue = await kvGetOverlayEnabled();
-      const overlayEnabled = kvValue === null
-        ? inMemoryOverlayEnabled
-        : parseBoolean(kvValue, true);
-      res.status(200).json({
-        overlayEnabled,
-        persistent: kvValue !== null
-      });
-      return;
-    } catch (error) {
-      res.status(200).json({
-        overlayEnabled: inMemoryOverlayEnabled,
-        persistent: false
-      });
-      return;
-    }
+    const payload = await readOverlaySettings();
+    res.status(200).json(payload);
+    return;
   }
 
   if (req.method === "PUT") {
@@ -101,17 +81,9 @@ module.exports = async (req, res) => {
       return;
     }
 
-    const next = parseBoolean(req.body?.overlayEnabled, true);
-    inMemoryOverlayEnabled = next;
-
-    try {
-      const persisted = await kvSetOverlayEnabled(next);
-      res.status(200).json({ ok: true, overlayEnabled: next, persistent: persisted });
-      return;
-    } catch {
-      res.status(200).json({ ok: true, overlayEnabled: next, persistent: false });
-      return;
-    }
+    const payload = await writeOverlaySettings(req.body?.overlayEnabled);
+    res.status(200).json({ ok: true, ...payload });
+    return;
   }
 
   res.status(405).json({ ok: false, error: "Method not allowed" });

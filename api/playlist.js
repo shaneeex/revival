@@ -1,64 +1,15 @@
+const fs = require("fs/promises");
+const path = require("path");
 const { isAuthenticated, setCors } = require("./_lib/session");
+const { readJsonState, writeJsonState } = require("./_lib/persistence");
 
 const KV_KEY = "signage:playlist";
+const CLOUDINARY_STATE_KEY = "playlist";
 const DEFAULT_IMAGE_MS = 10000;
+const DEFAULT_MAX_ITEMS = 80;
+const RUNTIME_CONFIG_PATH = path.join(process.cwd(), "runtime-config.json");
+
 let inMemoryPlaylist = [];
-
-function getKvConfig() {
-  const baseUrl = String(process.env.KV_REST_API_URL || "").trim();
-  const token = String(process.env.KV_REST_API_TOKEN || "").trim();
-  if (!baseUrl || !token) {
-    return null;
-  }
-  return { baseUrl: baseUrl.replace(/\/+$/, ""), token };
-}
-
-async function kvGetJson(key) {
-  const kv = getKvConfig();
-  if (!kv) {
-    return null;
-  }
-
-  const response = await fetch(`${kv.baseUrl}/get/${encodeURIComponent(key)}`, {
-    headers: { Authorization: `Bearer ${kv.token}` }
-  });
-  if (!response.ok) {
-    throw new Error(`KV GET failed (${response.status})`);
-  }
-
-  const payload = await response.json();
-  const raw = payload?.result;
-  if (raw === null || raw === undefined || raw === "") {
-    return null;
-  }
-
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-async function kvSetJson(key, value) {
-  const kv = getKvConfig();
-  if (!kv) {
-    return false;
-  }
-
-  const response = await fetch(`${kv.baseUrl}/set/${encodeURIComponent(key)}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${kv.token}`,
-      "Content-Type": "text/plain; charset=utf-8"
-    },
-    body: JSON.stringify(value)
-  });
-
-  if (!response.ok) {
-    throw new Error(`KV SET failed (${response.status})`);
-  }
-  return true;
-}
 
 function inferMediaType(src) {
   const value = String(src || "").toLowerCase();
@@ -105,35 +56,183 @@ function normalizePlaylistItems(items) {
     .slice(0, 500);
 }
 
-async function readPlaylist() {
+async function readRuntimeCloudinaryConfig() {
   try {
-    const kvValue = await kvGetJson(KV_KEY);
-    if (kvValue) {
-      return {
-        items: normalizePlaylistItems(Array.isArray(kvValue) ? kvValue : kvValue.items),
-        persistent: true
-      };
-    }
+    const raw = await fs.readFile(RUNTIME_CONFIG_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    const cloudinary = parsed?.cloudinary && typeof parsed.cloudinary === "object"
+      ? parsed.cloudinary
+      : {};
+
+    return {
+      cloudName: String(cloudinary.cloudName || "").trim(),
+      tag: String(cloudinary.tag || "").trim(),
+      maxItems: Number(cloudinary.maxItems) || DEFAULT_MAX_ITEMS,
+      defaultImageDurationMs: Math.max(1000, Number(cloudinary.defaultImageDurationMs) || DEFAULT_IMAGE_MS)
+    };
   } catch {
-    // Fall back to in-memory.
+    return {
+      cloudName: "",
+      tag: "",
+      maxItems: DEFAULT_MAX_ITEMS,
+      defaultImageDurationMs: DEFAULT_IMAGE_MS
+    };
+  }
+}
+
+async function getCloudinaryListConfig() {
+  const runtime = await readRuntimeCloudinaryConfig();
+  const cloudName = String(process.env.CLOUDINARY_CLOUD_NAME || runtime.cloudName || "").trim();
+  const tag = String(process.env.CLOUDINARY_UPLOAD_TAG || runtime.tag || "signage").trim();
+  const maxItems = Math.max(
+    1,
+    Math.min(
+      300,
+      Number(process.env.CLOUDINARY_UPLOAD_MAX_ITEMS) || Number(runtime.maxItems) || DEFAULT_MAX_ITEMS
+    )
+  );
+  const defaultImageDurationMs = Math.max(
+    1000,
+    Number(runtime.defaultImageDurationMs) || DEFAULT_IMAGE_MS
+  );
+
+  if (!cloudName || !tag) {
+    return null;
   }
 
   return {
-    items: normalizePlaylistItems(inMemoryPlaylist),
-    persistent: false
+    cloudName,
+    tag,
+    maxItems,
+    defaultImageDurationMs
   };
+}
+
+async function fetchCloudinaryResourceList(config, resourceType) {
+  const url = `https://res.cloudinary.com/${encodeURIComponent(config.cloudName)}/${resourceType}/list/${encodeURIComponent(config.tag)}.json?max_results=${config.maxItems}&_=${Date.now()}`;
+  const response = await fetch(url, { cache: "no-store" });
+
+  if (response.status === 404) {
+    return [];
+  }
+  if (!response.ok) {
+    throw new Error(`Cloudinary ${resourceType} list HTTP ${response.status}`);
+  }
+
+  const payload = await response.json();
+  return Array.isArray(payload?.resources) ? payload.resources : [];
+}
+
+function mapCloudinaryResource(resource, defaultImageDurationMs, cloudName) {
+  const resourceType = String(resource?.resource_type || "").toLowerCase() === "video" ? "video" : "image";
+  const publicId = String(resource?.public_id || "").trim();
+  if (!publicId) {
+    return null;
+  }
+
+  const secureUrl = String(resource?.secure_url || "").trim();
+  const format = String(resource?.format || "").trim();
+  const version = resource?.version ? `v${resource.version}/` : "";
+  const normalized = {
+    src: secureUrl || "",
+    type: resourceType,
+    publicId,
+    createdAtMs: Date.parse(resource?.created_at || "") || 0
+  };
+
+  if (!normalized.src && format) {
+    normalized.src = `https://res.cloudinary.com/${encodeURIComponent(cloudName)}/${resourceType}/upload/${version}${publicId}.${format}`;
+  }
+  if (!normalized.src) {
+    normalized.src = secureUrl;
+  }
+  if (!normalized.src) {
+    return null;
+  }
+
+  if (resourceType === "image") {
+    normalized.duration = defaultImageDurationMs;
+    const title = String(resource?.context?.custom?.title || "").trim();
+    if (title) {
+      normalized.title = title.slice(0, 120);
+    }
+  }
+
+  return normalized;
+}
+
+async function loadCloudinaryTaggedPlaylist() {
+  const config = await getCloudinaryListConfig();
+  if (!config) {
+    return [];
+  }
+
+  const [imagesResult, videosResult] = await Promise.allSettled([
+    fetchCloudinaryResourceList(config, "image"),
+    fetchCloudinaryResourceList(config, "video")
+  ]);
+  const images = imagesResult.status === "fulfilled" ? imagesResult.value : [];
+  const videos = videosResult.status === "fulfilled" ? videosResult.value : [];
+
+  if (imagesResult.status === "rejected" && videosResult.status === "rejected") {
+    throw imagesResult.reason || videosResult.reason || new Error("Cloudinary list unavailable");
+  }
+
+  return [...images, ...videos]
+    .map((item) => mapCloudinaryResource(item, config.defaultImageDurationMs, config.cloudName))
+    .filter(Boolean)
+    .sort((a, b) => b.createdAtMs - a.createdAtMs)
+    .slice(0, config.maxItems)
+    .map(({ createdAtMs, ...item }) => item);
+}
+
+async function readPlaylist() {
+  const state = await readJsonState({
+    kvKey: KV_KEY,
+    cloudinaryKey: CLOUDINARY_STATE_KEY,
+    memoryValue: inMemoryPlaylist
+  });
+
+  const rawItems = Array.isArray(state.value) ? state.value : state.value?.items;
+  let items = normalizePlaylistItems(rawItems);
+  let persistent = state.persistent;
+  let writable = state.writable;
+  let storage = state.storage;
+
+  // If durable state is unavailable and no in-memory items exist, build from Cloudinary tag list.
+  if (!persistent && !items.length) {
+    try {
+      const cloudinaryItems = normalizePlaylistItems(await loadCloudinaryTaggedPlaylist());
+      if (cloudinaryItems.length) {
+        items = cloudinaryItems;
+        persistent = true;
+        writable = false;
+        storage = "cloudinary-list";
+      }
+    } catch {
+      // Keep temporary in-memory fallback.
+    }
+  }
+
+  return { items, persistent, writable, storage };
 }
 
 async function writePlaylist(items) {
   const normalized = normalizePlaylistItems(items);
   inMemoryPlaylist = normalized;
 
-  try {
-    const persisted = await kvSetJson(KV_KEY, normalized);
-    return { items: normalized, persistent: persisted };
-  } catch {
-    return { items: normalized, persistent: false };
-  }
+  const state = await writeJsonState({
+    kvKey: KV_KEY,
+    cloudinaryKey: CLOUDINARY_STATE_KEY,
+    value: normalized
+  });
+
+  return {
+    items: normalized,
+    persistent: state.persistent,
+    writable: state.writable,
+    storage: state.storage
+  };
 }
 
 module.exports = async (req, res) => {

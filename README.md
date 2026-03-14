@@ -93,7 +93,8 @@ The signage frontend polls overlay settings and Cloudinary media automatically.
 ## Vercel Note
 
 - `api/settings.js` handles overlay toggle on Vercel.
-- For persistent overlay setting on Vercel, connect **Vercel KV** (`KV_REST_API_URL`, `KV_REST_API_TOKEN`).
+- For persistence on Vercel, connect **Vercel KV** (`KV_REST_API_URL`, `KV_REST_API_TOKEN`) or Upstash env names (`UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`).
+- If KV is unavailable, API now falls back to Cloudinary state storage when these are set: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (optional `CLOUDINARY_STATE_PREFIX`).
 - If overlay toggle fails, check `https://your-domain/api/settings` directly in browser.
 
 ## Media Source

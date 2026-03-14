@@ -4,7 +4,6 @@ const SESSION_API_URL = "/api/session";
 const LOGOUT_API_URL = "/api/logout";
 const SIGNATURE_API_URL = "/api/cloudinary-signature";
 const RUNTIME_CONFIG_URL = "runtime-config.json";
-const API_BASE_STORAGE_KEY = "signageApiBaseUrl";
 const OVERLAY_STATE_STORAGE_KEY = "revivalOverlayEnabled";
 const FETCH_TIMEOUT_MS = 15000;
 const UPLOAD_TIMEOUT_MS = 15 * 60 * 1000;
@@ -22,10 +21,13 @@ const uploadCloudinaryBtn = document.getElementById("upload-cloudinary-btn");
 const refreshCloudinaryBtn = document.getElementById("refresh-cloudinary-btn");
 const cloudinaryListEl = document.getElementById("cloudinary-list");
 const cloudinaryEmptyEl = document.getElementById("cloudinary-empty");
+const persistenceWarningEl = document.getElementById("persistence-warning");
 
 let apiBaseUrl = "";
 let playlist = [];
 let overlayEnabledState = true;
+let playlistPersistence = { persistent: true, writable: true, storage: "unknown" };
+let settingsPersistence = { persistent: true, writable: true, storage: "unknown" };
 let cloudinaryConfig = {
   enabled: false,
   cloudName: "",
@@ -40,6 +42,32 @@ let cloudinaryConfig = {
 function showStatus(text, isError = false) {
   statusEl.textContent = text;
   statusEl.style.color = isError ? "#ffb3b3" : "#9ff3c5";
+}
+
+function renderPersistenceWarning() {
+  if (!persistenceWarningEl) {
+    return;
+  }
+
+  const messages = [];
+  if (playlistPersistence.writable === false) {
+    messages.push("Content list is read-only (Cloudinary auto list). Configure KV or Cloudinary API key/secret to save edits.");
+  } else if (playlistPersistence.persistent === false) {
+    messages.push("Content list is temporary, may reset after deployment, and can differ across devices. Configure KV or Cloudinary API key/secret for persistence.");
+  }
+
+  if (settingsPersistence.persistent === false) {
+    messages.push("Overlay toggle is temporary and can reset after deployment.");
+  }
+
+  if (!messages.length) {
+    persistenceWarningEl.textContent = "";
+    persistenceWarningEl.classList.add("hidden");
+    return;
+  }
+
+  persistenceWarningEl.textContent = messages.join(" ");
+  persistenceWarningEl.classList.remove("hidden");
 }
 
 function normalizeApiBaseUrl(value) {
@@ -186,11 +214,6 @@ async function requestJson(url, options) {
 }
 
 async function loadRuntimeConfig() {
-  const fromStorage = normalizeApiBaseUrl(window.localStorage.getItem(API_BASE_STORAGE_KEY));
-  if (fromStorage) {
-    apiBaseUrl = fromStorage;
-  }
-
   try {
     const response = await fetchWithTimeout(RUNTIME_CONFIG_URL, { cache: "no-store" });
     if (!response.ok) {
@@ -203,9 +226,7 @@ async function loadRuntimeConfig() {
     }
 
     const payload = await response.json();
-    if (!fromStorage) {
-      apiBaseUrl = normalizeApiBaseUrl(payload?.apiBaseUrl || "");
-    }
+    apiBaseUrl = normalizeApiBaseUrl(payload?.apiBaseUrl || "");
     cloudinaryConfig = normalizeCloudinaryConfig(payload?.cloudinary);
   } catch {
     // Optional config file.
@@ -236,9 +257,15 @@ async function loadSettings() {
   const payload = await requestJson(buildApiUrl(SETTINGS_API_URL), { cache: "no-store" });
   const apiValue = payload.overlayEnabled !== false;
   const storedValue = readOverlayStateFromStorage();
+  settingsPersistence = {
+    persistent: payload.persistent !== false,
+    writable: payload.writable !== false,
+    storage: String(payload.storage || "")
+  };
   overlayEnabledState = payload.persistent === false && storedValue !== null ? storedValue : apiValue;
   renderOverlayToggleButton();
   writeOverlayStateToStorage(overlayEnabledState);
+  renderPersistenceWarning();
 
   // If server state reset but browser remembers user's last selection, push it back.
   if (overlayEnabledState !== apiValue) {
@@ -255,11 +282,17 @@ async function saveSettings(nextValue, showSuccess = true) {
   renderOverlayToggleButton();
   writeOverlayStateToStorage(overlayEnabledState);
 
-  await requestJson(buildApiUrl(SETTINGS_API_URL), {
+  const payload = await requestJson(buildApiUrl(SETTINGS_API_URL), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ overlayEnabled: overlayEnabledState })
   });
+  settingsPersistence = {
+    persistent: payload.persistent !== false,
+    writable: payload.writable !== false,
+    storage: String(payload.storage || "")
+  };
+  renderPersistenceWarning();
 
   if (showSuccess) {
     showStatus("Overlay setting updated.");
@@ -270,16 +303,28 @@ async function loadPlaylist() {
   const payload = await requestJson(buildApiUrl(PLAYLIST_API_URL), { cache: "no-store" });
   const rawItems = Array.isArray(payload?.items) ? payload.items : [];
   playlist = rawItems.map(normalizePlaylistItem).filter(Boolean);
+  playlistPersistence = {
+    persistent: payload.persistent !== false,
+    writable: payload.writable !== false,
+    storage: String(payload.storage || "")
+  };
+  renderPersistenceWarning();
 }
 
 async function savePlaylist() {
   const normalized = playlist.map(normalizePlaylistItem).filter(Boolean);
   playlist = normalized;
-  await requestJson(buildApiUrl(PLAYLIST_API_URL), {
+  const payload = await requestJson(buildApiUrl(PLAYLIST_API_URL), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ items: normalized })
   });
+  playlistPersistence = {
+    persistent: payload.persistent !== false,
+    writable: payload.writable !== false,
+    storage: String(payload.storage || "")
+  };
+  renderPersistenceWarning();
 }
 
 async function savePlaylistWithStatus(message = "Content list saved.") {
@@ -597,27 +642,41 @@ async function handleUploadClick() {
 
   try {
     let uploaded = 0;
+    const failed = [];
     for (const file of files) {
       showStatus(`Uploading ${uploaded + 1}/${files.length}: ${file.name}`);
-      const uploadedItem = await uploadSingleFile(file, imageTitle);
-      if (uploadedItem) {
-        playlist.unshift(uploadedItem);
+      try {
+        const uploadedItem = await uploadSingleFile(file, imageTitle);
+        if (uploadedItem) {
+          playlist.unshift(uploadedItem);
+          await savePlaylist();
+          uploaded += 1;
+        }
+      } catch (error) {
+        if ((error.message || "").includes("Unauthorized")) {
+          window.location.replace("/admin-login.html");
+          return;
+        }
+        if (error?.name === "AbortError") {
+          failed.push(`${file.name}: upload timed out`);
+          continue;
+        }
+        failed.push(`${file.name}: ${error.message || "upload failed"}`);
       }
-      uploaded += 1;
     }
 
     cloudinaryFilesEl.value = "";
     uploadImageTitleEl.value = "";
-    await savePlaylistWithStatus(`Uploaded ${uploaded} file(s) and added to content list.`);
+    await loadPlaylist();
+    renderPlaylist();
+
+    if (failed.length) {
+      const suffix = failed.length > 2 ? ` (+${failed.length - 2} more)` : "";
+      showStatus(`Uploaded ${uploaded}/${files.length}. ${failed.slice(0, 2).join(" | ")}${suffix}`, true);
+    } else {
+      showStatus(`Uploaded ${uploaded} file(s) and added to content list.`);
+    }
   } catch (error) {
-    if ((error.message || "").includes("Unauthorized")) {
-      window.location.replace("/admin-login.html");
-      return;
-    }
-    if (error?.name === "AbortError") {
-      showStatus("Upload timed out. Try a smaller file or better network, then retry.", true);
-      return;
-    }
     showStatus(error.message || "Cloudinary upload failed", true);
   } finally {
     uploadCloudinaryBtn.disabled = false;
