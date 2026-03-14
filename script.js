@@ -9,6 +9,7 @@ const DEFAULT_VIDEO_MAX_MS = 90000;
 const MEDIA_SLIDES_PER_NEWS = 3;
 const NEWS_SLIDE_MS = 30000;
 const NEWS_REFRESH_MS = 5 * 60 * 1000;
+const PLAYLIST_REFRESH_MS = 60 * 1000;
 const FETCH_TIMEOUT_MS = 12000;
 const NEWS_TITLE_MIN_FONT_PX = 16;
 const NEWS_TITLE_FONT_STEP_PX = 0.5;
@@ -32,6 +33,8 @@ const NEWS_IMAGE_MOTION_CLASSES = [
   "news-motion-pan-left",
   "news-motion-pan-right"
 ];
+const CLOUDINARY_DEFAULT_TAG = "signage";
+const CLOUDINARY_DEFAULT_MAX_ITEMS = 80;
 
 const mediaContainer = document.getElementById("media-container");
 const mediaFrameEl = document.querySelector(".media-frame");
@@ -48,6 +51,7 @@ let mediaSlidesSinceNews = 0;
 let mediaTimeoutId = null;
 let imageMotionIndex = 0;
 let newsImageMotionIndex = 0;
+let mediaRefreshInFlight = false;
 
 let newsItems = [];
 let newsIndex = 0;
@@ -63,6 +67,15 @@ let alertBeepTick = 0;
 let overlayEnabled = true;
 let overlayListenersBound = false;
 let apiBaseUrl = "";
+let cloudinaryConfig = {
+  enabled: false,
+  cloudName: "",
+  uploadPreset: "",
+  tag: CLOUDINARY_DEFAULT_TAG,
+  folder: "",
+  defaultImageDurationMs: DEFAULT_IMAGE_MS,
+  maxItems: CLOUDINARY_DEFAULT_MAX_ITEMS
+};
 
 if (IS_ANDROID) {
   document.documentElement.classList.add("perf-mode");
@@ -74,6 +87,26 @@ function normalizeApiBaseUrl(value) {
     return "";
   }
   return raw.replace(/\/+$/, "");
+}
+
+function normalizeCloudinaryConfig(value) {
+  const raw = value && typeof value === "object" ? value : {};
+  const cloudName = String(raw.cloudName || "").trim();
+  const uploadPreset = String(raw.uploadPreset || "").trim();
+  const tag = String(raw.tag || CLOUDINARY_DEFAULT_TAG).trim() || CLOUDINARY_DEFAULT_TAG;
+  const folder = String(raw.folder || "").trim().replace(/^\/+|\/+$/g, "");
+  const defaultImageDurationMs = Math.max(1000, Number(raw.defaultImageDurationMs) || DEFAULT_IMAGE_MS);
+  const maxItems = Math.max(1, Math.min(300, Number(raw.maxItems) || CLOUDINARY_DEFAULT_MAX_ITEMS));
+
+  return {
+    enabled: Boolean(raw.enabled) && Boolean(cloudName) && Boolean(tag),
+    cloudName,
+    uploadPreset,
+    tag,
+    folder,
+    defaultImageDurationMs,
+    maxItems
+  };
 }
 
 function buildApiUrl(pathname) {
@@ -90,7 +123,6 @@ async function loadRuntimeConfig() {
   const fromStorage = normalizeApiBaseUrl(window.localStorage.getItem(API_BASE_STORAGE_KEY));
   if (fromStorage) {
     apiBaseUrl = fromStorage;
-    return;
   }
 
   try {
@@ -105,7 +137,10 @@ async function loadRuntimeConfig() {
     }
 
     const payload = await response.json();
-    apiBaseUrl = normalizeApiBaseUrl(payload?.apiBaseUrl || "");
+    if (!fromStorage) {
+      apiBaseUrl = normalizeApiBaseUrl(payload?.apiBaseUrl || "");
+    }
+    cloudinaryConfig = normalizeCloudinaryConfig(payload?.cloudinary);
   } catch (error) {
     // Optional config; keep empty apiBaseUrl.
   }
@@ -561,7 +596,85 @@ function normalizeMediaItem(item) {
   };
 }
 
+async function fetchCloudinaryResourceList(resourceType) {
+  const { cloudName, tag, maxItems } = cloudinaryConfig;
+  const bust = Date.now();
+  const url = `https://res.cloudinary.com/${encodeURIComponent(cloudName)}/${resourceType}/list/${encodeURIComponent(tag)}.json?max_results=${maxItems}&_=${bust}`;
+  const response = await fetchWithTimeout(url, { cache: "no-store" });
+
+  if (response.status === 404) {
+    return [];
+  }
+  if (!response.ok) {
+    throw new Error(`Cloudinary ${resourceType} list HTTP ${response.status}`);
+  }
+
+  const payload = await response.json();
+  return Array.isArray(payload?.resources) ? payload.resources : [];
+}
+
+function mapCloudinaryResource(resource, resourceType) {
+  const format = String(resource?.format || "").toLowerCase();
+  const version = resource?.version ? `v${resource.version}/` : "";
+  const publicId = String(resource?.public_id || "").trim();
+  if (!publicId) {
+    return null;
+  }
+
+  const source = resource?.secure_url
+    || `https://res.cloudinary.com/${encodeURIComponent(cloudinaryConfig.cloudName)}/${resourceType}/upload/${version}${publicId}.${format}`;
+
+  const isVideo = resourceType === "video";
+  const createdAtMs = Date.parse(resource?.created_at || "") || 0;
+
+  return {
+    src: source,
+    type: isVideo ? "video" : "image",
+    duration: isVideo ? 0 : cloudinaryConfig.defaultImageDurationMs,
+    createdAtMs
+  };
+}
+
+async function loadCloudinaryPlaylist() {
+  if (!cloudinaryConfig.enabled) {
+    return false;
+  }
+
+  const [imagesResult, videosResult] = await Promise.allSettled([
+    fetchCloudinaryResourceList("image"),
+    fetchCloudinaryResourceList("video")
+  ]);
+  const images = imagesResult.status === "fulfilled" ? imagesResult.value : [];
+  const videos = videosResult.status === "fulfilled" ? videosResult.value : [];
+
+  if (imagesResult.status === "rejected" && videosResult.status === "rejected") {
+    throw imagesResult.reason || videosResult.reason || new Error("Cloudinary list failed");
+  }
+
+  const combined = [...images, ...videos]
+    .map((item) => mapCloudinaryResource(item, item?.resource_type === "video" ? "video" : "image"))
+    .filter(Boolean)
+    .sort((a, b) => b.createdAtMs - a.createdAtMs)
+    .slice(0, cloudinaryConfig.maxItems)
+    .map(({ createdAtMs, ...item }) => item);
+
+  mediaFiles = combined;
+  return true;
+}
+
 async function loadPlaylist() {
+  try {
+    const usedCloudinary = await loadCloudinaryPlaylist();
+    if (usedCloudinary) {
+      if (!mediaFiles.length) {
+        mediaContainer.innerHTML = '<div class="panel-message">No Cloudinary media found for configured tag</div>';
+      }
+      return;
+    }
+  } catch (error) {
+    console.warn("Cloudinary playlist load failed:", error);
+  }
+
   const sources = [buildApiUrl(PLAYLIST_API_URL), PLAYLIST_URL];
   let lastError = null;
 
@@ -643,6 +756,23 @@ async function loadRemoteImages() {
     });
   } catch (error) {
     console.warn("Remote image fetch failed:", error);
+  }
+}
+
+async function refreshMediaSources() {
+  if (mediaRefreshInFlight) {
+    return;
+  }
+
+  mediaRefreshInFlight = true;
+  try {
+    await loadPlaylist();
+    await loadRemoteImages();
+    if (!mediaFiles.length || mediaIndex >= mediaFiles.length) {
+      mediaIndex = 0;
+    }
+  } finally {
+    mediaRefreshInFlight = false;
   }
 }
 
@@ -1006,8 +1136,7 @@ async function refreshNews() {
 async function init() {
   await loadRuntimeConfig();
   await refreshRuntimeSettings();
-  await loadPlaylist();
-  await loadRemoteImages();
+  await refreshMediaSources();
   updateMarqueeContent(buildMarqueeMessage());
   refreshNews();
   showNextSlide();
@@ -1023,7 +1152,11 @@ async function init() {
   setupTimeupOverlay();
   setInterval(updateClock, 1000);
   setInterval(refreshRuntimeSettings, SETTINGS_REFRESH_MS);
-  setInterval(loadRemoteImages, NEWS_REFRESH_MS);
+  setInterval(() => {
+    refreshMediaSources().catch((error) => {
+      console.warn("Media refresh failed:", error);
+    });
+  }, PLAYLIST_REFRESH_MS);
   setInterval(refreshNews, NEWS_REFRESH_MS);
 }
 

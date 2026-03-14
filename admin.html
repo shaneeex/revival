@@ -4,13 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Revival Signage Admin</title>
-  <link rel="stylesheet" href="admin.css" />
+  <link rel="stylesheet" href="admin.css?v=20260314g" />
 </head>
 <body>
   <main class="admin-shell">
     <header class="admin-header">
       <h1>Revival Signage Admin</h1>
-      <p>Manage playlist order and control overlay behavior.</p>
+      <p>Upload directly to Cloudinary and control overlay behavior.</p>
     </header>
 
     <section class="card">
@@ -25,20 +25,23 @@
     </section>
 
     <section class="card">
-      <div class="card-head">
-        <h2>Playlist</h2>
-        <div class="card-actions">
-          <button id="reload-btn" type="button">Reload</button>
-          <button id="save-playlist-btn" type="button">Save Playlist</button>
-        </div>
+      <div class="card-head cloudinary-head">
+        <h2>Cloudinary Upload</h2>
+        <button id="refresh-cloudinary-btn" type="button" class="secondary">Refresh List</button>
       </div>
-      <div id="playlist-empty" class="muted hidden">No items in playlist.</div>
-      <div id="playlist-list" class="playlist-list"></div>
+      <p id="cloudinary-config" class="muted"></p>
+      <div class="upload-form">
+        <label for="cloudinary-files">Select images/videos</label>
+        <input id="cloudinary-files" type="file" multiple accept="image/*,video/*" />
+        <button id="upload-cloudinary-btn" type="button">Upload to Cloudinary</button>
+      </div>
+      <div id="cloudinary-empty" class="muted">No Cloudinary items found for this tag yet.</div>
+      <div id="cloudinary-list" class="playlist-list"></div>
     </section>
 
     <div id="status" class="status" role="status" aria-live="polite"></div>
   </main>
 
-  <script src="admin.js"></script>
+  <script src="admin.js?v=20260314g"></script>
 </body>
 </html>

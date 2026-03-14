@@ -1,3 +1,12 @@
 {
-  "apiBaseUrl": ""
+  "apiBaseUrl": "",
+  "cloudinary": {
+    "enabled": false,
+    "cloudName": "",
+    "uploadPreset": "",
+    "tag": "signage",
+    "folder": "revival/signage",
+    "defaultImageDurationMs": 10000,
+    "maxItems": 80
+  }
 }

@@ -1,21 +1,17 @@
-# Revival Signage (Local + Admin Backend)
+# Revival Signage (Cloudinary + Overlay Control)
 
 This project runs a signage display with:
 
-1. Main slideshow (local media + optional remote site images)
+1. Main slideshow (Cloudinary media + optional remote site images)
 2. News slides integrated into the main slideshow
 3. Sponsor logo section
 4. Time-up overlay (now remotely toggleable)
 
-## New Backend Features
+## Cloudinary Automation
 
-- Reorder and edit playlist durations without editing JSON manually
-- Delete media files from disk
-- Toggle Time Up overlay ON/OFF from admin panel
-
-Cloudinary note:
-- You can use direct `https://...` Cloudinary media URLs in playlist items (`file` or `src`).
-- Upload UI is optional and can be skipped.
+- Upload images/videos directly from `/admin` to Cloudinary
+- Slideshow auto-loads assets from Cloudinary by tag
+- No manual playlist editing required for daily updates
 
 ## Quick Start
 
@@ -47,64 +43,53 @@ On another device in same Wi-Fi (example IP):
 - Signage: `http://192.168.1.50:8080`
 - Admin: `http://192.168.1.50:8080/admin`
 
-## Admin Panel Workflow
+## Cloudinary Setup (One Time)
 
-1. Go to `/admin`
-2. Upload media files
-3. Reorder playlist (Move Up/Down)
-4. Set image durations (ms)
-5. Click `Save Playlist`
-6. Toggle `Enable "Time Up" overlay` and save settings
-
-The signage frontend polls settings and applies overlay ON/OFF automatically.
-
-## If You See 404 In Admin
-
-If `/admin` shows `404` status messages, your frontend is likely hosted as static files without backend on same domain.
-
-Set backend URL using one of these:
-
-1. In `/admin`, set `Backend API URL` and click `Apply API URL` (stored in browser localStorage).
-2. Or set `apiBaseUrl` in `runtime-config.json` and redeploy.
-
-Example:
+Update `runtime-config.json`:
 
 ```json
 {
-  "apiBaseUrl": "https://your-backend-domain.com"
+  "apiBaseUrl": "",
+  "cloudinary": {
+    "enabled": true,
+    "cloudName": "YOUR_CLOUD_NAME",
+    "uploadPreset": "YOUR_UNSIGNED_PRESET",
+    "tag": "signage",
+    "folder": "revival/signage",
+    "defaultImageDurationMs": 10000,
+    "maxItems": 80
+  }
 }
 ```
 
-Then both admin and signage will call:
+Cloudinary requirements:
+- Create an **unsigned upload preset**
+- Enable **Resource list** (needed for `.../image/list/<tag>.json` and `.../video/list/<tag>.json`)
+- Use same tag as `runtime-config.json` (example: `signage`)
 
-- `https://your-backend-domain.com/api/playlist`
-- `https://your-backend-domain.com/api/settings`
+## Admin Workflow
 
-Vercel-only shortcut:
-- This repo includes `api/settings.js` and `api/health.js` so overlay control can work on Vercel without a separate server.
-- For persistent overlay setting on Vercel, connect **Vercel KV** (env vars `KV_REST_API_URL` and `KV_REST_API_TOKEN`).
+1. Go to `/admin`
+2. Select media files and click `Upload to Cloudinary`
+3. Toggle `Enable "Time Up" overlay` when needed
 
-## Media + Playlist Storage
+The signage frontend polls overlay settings and Cloudinary media automatically.
 
-- Media files: `media/`
-- Playlist file: `media/playlist.json`
+## Vercel Note
+
+- `api/settings.js` handles overlay toggle on Vercel.
+- For persistent overlay setting on Vercel, connect **Vercel KV** (`KV_REST_API_URL`, `KV_REST_API_TOKEN`).
+- If overlay toggle fails, check `https://your-domain/api/settings` directly in browser.
+
+## Media Source
+
+- Cloudinary tagged resources (`image/list/<tag>.json` and `video/list/<tag>.json`)
+- Fallback: local `media/playlist.json` if Cloudinary is not enabled
 - Runtime settings: `config/settings.json`
 - Runtime API config: `runtime-config.json`
 
-Playlist format:
-
-```json
-[
-  { "file": "intro.mp4", "type": "video" },
-  { "file": "promo1.jpg", "type": "image", "duration": 12000 }
-]
-```
-
 ## API Endpoints
 
-- `GET /api/playlist`
-- `PUT /api/playlist`
-- `DELETE /api/media/:name`
 - `GET /api/settings`
 - `PUT /api/settings`
 
