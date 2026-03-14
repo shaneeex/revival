@@ -30,7 +30,8 @@
       <div class="upload-form">
         <label for="cloudinary-files">Select files</label>
         <input id="cloudinary-files" type="file" multiple accept="image/*,video/*" />
-        <input id="upload-image-title" type="text" maxlength="120" placeholder="Optional heading for images" class="hidden" />
+        <label for="upload-image-title">Heading (optional for images)</label>
+        <input id="upload-image-title" type="text" maxlength="120" placeholder="Enter heading" />
         <button id="upload-cloudinary-btn" type="button">Upload</button>
       </div>
       <div id="cloudinary-empty" class="muted">No content items configured yet.</div>
@@ -40,6 +41,6 @@
     <div id="status" class="status" role="status" aria-live="polite"></div>
   </main>
 
-  <script src="admin.js?v=20260315b"></script>
+  <script src="admin.js?v=20260315c"></script>
 </body>
 </html>
