@@ -6,6 +6,9 @@ const {
   timingSafeEqualText
 } = require("./_lib/session");
 
+const DEFAULT_ADMIN_USERNAME = "admin";
+const DEFAULT_ADMIN_PASSWORD = "Revival@123";
+
 module.exports = async (req, res) => {
   setCors(res);
 
@@ -19,14 +22,9 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const adminUser = String(process.env.ADMIN_USERNAME || "admin").trim();
-  const adminPassword = String(process.env.ADMIN_PASSWORD || "").trim();
+  const adminUser = String(process.env.ADMIN_USERNAME || DEFAULT_ADMIN_USERNAME).trim();
+  const adminPassword = String(process.env.ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD).trim();
   const sessionTtl = Math.max(300, Number(process.env.ADMIN_SESSION_TTL_SECONDS) || DEFAULT_TTL_SECONDS);
-
-  if (!adminPassword) {
-    res.status(500).json({ ok: false, error: "ADMIN_PASSWORD is not configured" });
-    return;
-  }
 
   const inputUser = String(req.body?.username || "").trim();
   const inputPassword = String(req.body?.password || "");
