@@ -675,10 +675,11 @@ async function loadPlaylist() {
         const payload = await response.json();
         const rawItems = Array.isArray(payload) ? payload : payload.items;
         const managedItems = (rawItems || []).map(normalizeMediaItem).filter(Boolean);
-        if (managedItems.length) {
-          mediaFiles = managedItems;
-          return;
+        mediaFiles = managedItems;
+        if (!mediaFiles.length) {
+          mediaContainer.innerHTML = '<div class="panel-message">No media in admin content list</div>';
         }
+        return;
       }
     }
   } catch (error) {
