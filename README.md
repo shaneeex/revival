@@ -53,13 +53,19 @@ Update `runtime-config.json`:
   "cloudinary": {
     "enabled": true,
     "cloudName": "YOUR_CLOUD_NAME",
+    "uploadMode": "unsigned",
     "tag": "signage",
     "folder": "revival",
+    "uploadPreset": "signage",
     "defaultImageDurationMs": 10000,
     "maxItems": 80
   }
 }
 ```
+
+Upload modes:
+- `uploadMode: "unsigned"` -> uses `uploadPreset` directly (simple, no Cloudinary API key/secret needed for upload)
+- `uploadMode: "signed"` -> uses `/api/cloudinary-signature` and requires Cloudinary API key/secret env vars
 
 Set these environment variables on Vercel (or your backend host):
 - `ADMIN_USERNAME` (example: `admin`)

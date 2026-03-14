@@ -23,6 +23,7 @@ let apiBaseUrl = "";
 let cloudinaryConfig = {
   enabled: false,
   cloudName: "",
+  uploadMode: "unsigned",
   uploadPreset: "",
   tag: CLOUDINARY_DEFAULT_TAG,
   folder: "",
@@ -46,6 +47,8 @@ function normalizeApiBaseUrl(value) {
 function normalizeCloudinaryConfig(value) {
   const raw = value && typeof value === "object" ? value : {};
   const cloudName = String(raw.cloudName || "").trim();
+  const uploadModeRaw = String(raw.uploadMode || "").trim().toLowerCase();
+  const uploadMode = uploadModeRaw === "signed" ? "signed" : "unsigned";
   const uploadPreset = String(raw.uploadPreset || "").trim();
   const tag = String(raw.tag || CLOUDINARY_DEFAULT_TAG).trim() || CLOUDINARY_DEFAULT_TAG;
   const folder = String(raw.folder || "").trim().replace(/^\/+|\/+$/g, "");
@@ -55,6 +58,7 @@ function normalizeCloudinaryConfig(value) {
   return {
     enabled: Boolean(raw.enabled) && Boolean(cloudName) && Boolean(tag),
     cloudName,
+    uploadMode,
     uploadPreset,
     tag,
     folder,
@@ -134,7 +138,9 @@ async function loadRuntimeConfig() {
 
 function renderCloudinaryConfigStatus() {
   if (cloudinaryConfig.enabled) {
-    const modeText = cloudinaryConfig.uploadPreset ? "signed+unsigned ready" : "signed-only (env required)";
+    const modeText = cloudinaryConfig.uploadMode === "signed"
+      ? "signed mode"
+      : "unsigned preset mode";
     cloudinaryConfigEl.textContent = `Connected: ${cloudinaryConfig.cloudName} | tag: ${cloudinaryConfig.tag} | folder: ${cloudinaryConfig.folder || "(root)"} | ${modeText}`;
     cloudinaryConfigEl.classList.remove("error-text");
     return;
@@ -194,6 +200,16 @@ async function uploadUnsignedFile(file, resourceType, uploadPreset) {
 
 async function uploadSingleFile(file) {
   const resourceType = file.type.startsWith("video/") ? "video" : "image";
+
+  if (cloudinaryConfig.uploadMode !== "signed") {
+    const preset = String(cloudinaryConfig.uploadPreset || "").trim();
+    if (!preset) {
+      throw new Error("Unsigned mode requires cloudinary.uploadPreset in runtime-config.json");
+    }
+    await uploadUnsignedFile(file, resourceType, preset);
+    return;
+  }
+
   let signed = null;
   try {
     signed = await getUploadSignature(resourceType);
