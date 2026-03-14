@@ -110,6 +110,7 @@ The signage frontend polls overlay settings and Cloudinary media automatically.
 - `GET /api/session`
 - `POST /api/logout`
 - `POST /api/cloudinary-signature`
+- `GET /api/env-check`
 - `GET /api/playlist`
 - `PUT /api/playlist`
 - `GET /api/settings`
