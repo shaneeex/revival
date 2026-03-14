@@ -7,7 +7,7 @@ const DEFAULT_VIDEO_MAX_MS = 90000;
 const MEDIA_SLIDES_PER_NEWS = 3;
 const NEWS_SLIDE_MS = 30000;
 const NEWS_REFRESH_MS = 5 * 60 * 1000;
-const PLAYLIST_REFRESH_MS = 60 * 1000;
+const PLAYLIST_REFRESH_MS = 10 * 1000;
 const FETCH_TIMEOUT_MS = 12000;
 const NEWS_TITLE_MIN_FONT_PX = 16;
 const NEWS_TITLE_FONT_STEP_PX = 0.5;
@@ -45,6 +45,7 @@ let mediaFiles = [];
 let mediaIndex = 0;
 let mediaSlidesSinceNews = 0;
 let mediaTimeoutId = null;
+let mediaStateSignature = "";
 let imageMotionIndex = 0;
 let newsImageMotionIndex = 0;
 let mediaRefreshInFlight = false;
@@ -619,6 +620,18 @@ function titleFromMediaPath(value) {
   }
 }
 
+function createMediaStateSignature(items) {
+  return (Array.isArray(items) ? items : [])
+    .map((item) => [
+      String(item?.src || "").trim(),
+      String(item?.type || "").trim(),
+      String(item?.duration || ""),
+      String(item?.title || "").trim(),
+      String(item?.publicId || "").trim()
+    ].join("|"))
+    .join("||");
+}
+
 function getImageSlideTitle(item) {
   const explicit = normalizeInlineText(item?.title || "");
   if (explicit) {
@@ -761,9 +774,20 @@ async function refreshMediaSources() {
 
   mediaRefreshInFlight = true;
   try {
+    const previousSignature = mediaStateSignature;
     await loadPlaylist();
+    const nextSignature = createMediaStateSignature(mediaFiles);
+    const changed = nextSignature !== previousSignature;
+    mediaStateSignature = nextSignature;
+
     if (!mediaFiles.length || mediaIndex >= mediaFiles.length) {
       mediaIndex = 0;
+    }
+
+    // When admin uploads/edits content, switch quickly instead of waiting for long slide/video timeouts.
+    if (changed && previousSignature) {
+      mediaSlidesSinceNews = 0;
+      scheduleNextSlide(500);
     }
   } finally {
     mediaRefreshInFlight = false;
