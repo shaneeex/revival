@@ -666,6 +666,26 @@ async function loadCloudinaryPlaylist() {
 }
 
 async function loadPlaylist() {
+  // 1) Prefer managed playlist from backend (admin content list).
+  try {
+    const response = await fetchWithTimeout(buildApiUrl(PLAYLIST_API_URL), { cache: "no-store" });
+    if (response.ok) {
+      const contentType = (response.headers.get("content-type") || "").toLowerCase();
+      if (contentType.includes("application/json")) {
+        const payload = await response.json();
+        const rawItems = Array.isArray(payload) ? payload : payload.items;
+        const managedItems = (rawItems || []).map(normalizeMediaItem).filter(Boolean);
+        if (managedItems.length) {
+          mediaFiles = managedItems;
+          return;
+        }
+      }
+    }
+  } catch (error) {
+    console.warn("Managed playlist load failed:", error);
+  }
+
+  // 2) Fallback to Cloudinary tag list.
   try {
     const usedCloudinary = await loadCloudinaryPlaylist();
     if (usedCloudinary) {
@@ -678,7 +698,8 @@ async function loadPlaylist() {
     console.warn("Cloudinary playlist load failed:", error);
   }
 
-  const sources = [buildApiUrl(PLAYLIST_API_URL), PLAYLIST_URL];
+  // 3) Final fallback to static local playlist file.
+  const sources = [PLAYLIST_URL];
   let lastError = null;
 
   for (const source of sources) {

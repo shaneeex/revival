@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Revival Signage Admin</title>
-  <link rel="stylesheet" href="admin.css?v=20260314i" />
+  <link rel="stylesheet" href="admin.css?v=20260314j" />
 </head>
 <body>
   <main class="admin-shell">
@@ -30,7 +30,10 @@
     <section class="card">
       <div class="card-head cloudinary-head">
         <h2>Cloudinary Upload</h2>
-        <button id="refresh-cloudinary-btn" type="button" class="secondary">Refresh List</button>
+        <div class="card-actions">
+          <button id="refresh-cloudinary-btn" type="button" class="secondary">Reload</button>
+          <button id="save-playlist-btn" type="button">Save Content List</button>
+        </div>
       </div>
       <p id="cloudinary-config" class="muted"></p>
       <div class="upload-form">
@@ -38,13 +41,13 @@
         <input id="cloudinary-files" type="file" multiple accept="image/*,video/*" />
         <button id="upload-cloudinary-btn" type="button">Upload to Cloudinary</button>
       </div>
-      <div id="cloudinary-empty" class="muted">No Cloudinary items found for this tag yet.</div>
+      <div id="cloudinary-empty" class="muted">No content items configured yet.</div>
       <div id="cloudinary-list" class="playlist-list"></div>
     </section>
 
     <div id="status" class="status" role="status" aria-live="polite"></div>
   </main>
 
-  <script src="admin.js?v=20260314i"></script>
+  <script src="admin.js?v=20260314j"></script>
 </body>
 </html>

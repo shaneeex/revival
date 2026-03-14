@@ -85,7 +85,8 @@ Cloudinary requirements:
 
 1. Go to `/admin-login.html` and sign in
 2. Select media files and click `Upload to Cloudinary`
-3. Toggle `Enable "Time Up" overlay` when needed
+3. Manage the **Content List** (remove/reorder/update image duration) without deleting from Cloudinary
+4. Toggle `Enable "Time Up" overlay` when needed
 
 The signage frontend polls overlay settings and Cloudinary media automatically.
 
@@ -108,6 +109,8 @@ The signage frontend polls overlay settings and Cloudinary media automatically.
 - `GET /api/session`
 - `POST /api/logout`
 - `POST /api/cloudinary-signature`
+- `GET /api/playlist`
+- `PUT /api/playlist`
 - `GET /api/settings`
 - `PUT /api/settings`
 
