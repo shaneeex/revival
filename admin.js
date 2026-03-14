@@ -6,6 +6,7 @@ const SIGNATURE_API_URL = "/api/cloudinary-signature";
 const RUNTIME_CONFIG_URL = "runtime-config.json";
 const API_BASE_STORAGE_KEY = "signageApiBaseUrl";
 const FETCH_TIMEOUT_MS = 15000;
+const UPLOAD_TIMEOUT_MS = 15 * 60 * 1000;
 const DEFAULT_IMAGE_MS = 10000;
 const CLOUDINARY_DEFAULT_TAG = "signage";
 const CLOUDINARY_DEFAULT_MAX_ITEMS = 80;
@@ -101,13 +102,15 @@ function buildApiUrl(pathname) {
   return `${apiBaseUrl}${pathname.startsWith("/") ? pathname : `/${pathname}`}`;
 }
 
-async function fetchWithTimeout(url, options) {
+async function fetchWithTimeout(url, options, timeoutMs = FETCH_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timeoutId = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } finally {
-    clearTimeout(timeoutId);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
   }
 }
 
@@ -370,7 +373,7 @@ async function uploadUnsignedFile(file, resourceType, uploadPreset) {
     body.append("tags", cloudinaryConfig.tag);
   }
 
-  const response = await fetchWithTimeout(uploadUrl, { method: "POST", body });
+  const response = await fetchWithTimeout(uploadUrl, { method: "POST", body }, UPLOAD_TIMEOUT_MS);
   const raw = await response.text();
   if (!response.ok) {
     throw new Error(`Upload failed for ${file.name}: ${response.status} ${raw}`.slice(0, 260));
@@ -427,7 +430,7 @@ async function uploadSingleFile(file) {
     body.append("tags", signed.tags);
   }
 
-  const response = await fetchWithTimeout(uploadUrl, { method: "POST", body });
+  const response = await fetchWithTimeout(uploadUrl, { method: "POST", body }, UPLOAD_TIMEOUT_MS);
   const raw = await response.text();
   if (!response.ok) {
     throw new Error(`Upload failed for ${file.name}: ${response.status} ${raw}`.slice(0, 260));
@@ -474,6 +477,10 @@ async function handleUploadClick() {
   } catch (error) {
     if ((error.message || "").includes("Unauthorized")) {
       window.location.replace("/admin-login.html");
+      return;
+    }
+    if (error?.name === "AbortError") {
+      showStatus("Upload timed out. Try a smaller file or better network, then retry.", true);
       return;
     }
     showStatus(error.message || "Cloudinary upload failed", true);
