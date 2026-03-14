@@ -320,10 +320,10 @@ body {
   border-top: 0.22vh solid var(--red-1);
   border-bottom: 0.18vh solid rgba(255, 67, 98, 0.55);
   background: linear-gradient(180deg, #131b28 0%, #0d1420 100%);
-  display: grid;
-  grid-template-rows: auto 1fr;
-  gap: 0.4vh;
-  padding: 0.65vh 1.15vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5vh 1.05vh;
 }
 
 #marquee-section {
@@ -374,27 +374,19 @@ body {
   color: #f4f8ff;
 }
 
-.sponsor-text {
-  font-family: "Barlow Condensed", sans-serif;
-  font-size: clamp(1rem, 2.25vh, 1.55rem);
-  font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  text-align: center;
-  color: #f0f5ff;
-}
-
 .logo-row {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: min(3vw, 2vh);
+  gap: min(4.2vw, 2.8vh);
+  width: 100%;
+  height: 100%;
 }
 
 .logo-row img {
-  height: 52%;
-  max-width: 29%;
-  max-height: 6vh;
+  height: 78%;
+  max-width: 39%;
+  max-height: 8.8vh;
   object-fit: contain;
   filter: drop-shadow(0 0.16vh 0.5vh rgba(0, 0, 0, 0.5));
   animation: none;
