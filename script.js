@@ -602,7 +602,51 @@ function normalizeMediaItem(item) {
     }
   }
 
+  const publicId = String(item?.publicId || "").trim();
+  if (publicId) {
+    normalized.publicId = publicId;
+  }
+
   return normalized;
+}
+
+function titleFromMediaPath(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return "";
+  }
+
+  try {
+    const asUrl = /^https?:\/\//i.test(raw) ? new URL(raw) : null;
+    const path = asUrl ? asUrl.pathname : raw;
+    const part = decodeURIComponent(path.split("/").filter(Boolean).pop() || "");
+    const withoutExt = part.replace(/\.[a-z0-9]+$/i, "");
+    return withoutExt
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  } catch {
+    return raw.replace(/[_-]+/g, " ").trim();
+  }
+}
+
+function getImageSlideTitle(item) {
+  const explicit = normalizeInlineText(item?.title || "");
+  if (explicit) {
+    return explicit;
+  }
+
+  const fromPublicId = titleFromMediaPath(item?.publicId || "");
+  if (fromPublicId) {
+    return fromPublicId.toUpperCase();
+  }
+
+  const fromSource = titleFromMediaPath(item?.src || "");
+  if (fromSource) {
+    return fromSource.toUpperCase();
+  }
+
+  return "";
 }
 
 async function fetchCloudinaryResourceList(resourceType) {
@@ -998,17 +1042,17 @@ function showMediaSlide() {
   img.addEventListener("error", () => scheduleNextSlide(400), { once: true });
   shell.appendChild(img);
 
-  const title = normalizeInlineText(item.title || "");
+  const title = getImageSlideTitle(item);
   if (title) {
     const caption = document.createElement("div");
-    caption.className = "image-slide-headline";
+    caption.className = "news-slide-headline image-news-headline";
 
     const kicker = document.createElement("div");
-    kicker.className = "image-slide-kicker";
-    kicker.textContent = "PHOTO";
+    kicker.className = "news-slide-kicker";
+    kicker.textContent = "GALLERY";
 
     const heading = document.createElement("h3");
-    heading.className = "image-slide-title";
+    heading.className = "news-slide-title image-news-title";
     heading.textContent = title;
 
     caption.append(kicker, heading);

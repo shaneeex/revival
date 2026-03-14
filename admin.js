@@ -601,7 +601,7 @@ async function handleUploadClick() {
       showStatus(`Uploading ${uploaded + 1}/${files.length}: ${file.name}`);
       const uploadedItem = await uploadSingleFile(file, imageTitle);
       if (uploadedItem) {
-        playlist.push(uploadedItem);
+        playlist.unshift(uploadedItem);
       }
       uploaded += 1;
     }
