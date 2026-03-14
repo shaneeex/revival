@@ -5,6 +5,7 @@ const LOGOUT_API_URL = "/api/logout";
 const SIGNATURE_API_URL = "/api/cloudinary-signature";
 const RUNTIME_CONFIG_URL = "runtime-config.json";
 const API_BASE_STORAGE_KEY = "signageApiBaseUrl";
+const OVERLAY_STATE_STORAGE_KEY = "revivalOverlayEnabled";
 const FETCH_TIMEOUT_MS = 15000;
 const UPLOAD_TIMEOUT_MS = 15 * 60 * 1000;
 const DEFAULT_IMAGE_MS = 10000;
@@ -12,11 +13,11 @@ const CLOUDINARY_DEFAULT_TAG = "signage";
 const CLOUDINARY_DEFAULT_MAX_ITEMS = 80;
 
 const statusEl = document.getElementById("status");
-const overlayToggleEl = document.getElementById("overlay-toggle");
-const saveSettingsBtn = document.getElementById("save-settings-btn");
+const overlayToggleBtnEl = document.getElementById("overlay-toggle-btn");
 const logoutBtn = document.getElementById("logout-btn");
 const cloudinaryConfigEl = document.getElementById("cloudinary-config");
 const cloudinaryFilesEl = document.getElementById("cloudinary-files");
+const uploadImageTitleEl = document.getElementById("upload-image-title");
 const uploadCloudinaryBtn = document.getElementById("upload-cloudinary-btn");
 const refreshCloudinaryBtn = document.getElementById("refresh-cloudinary-btn");
 const cloudinaryListEl = document.getElementById("cloudinary-list");
@@ -24,6 +25,7 @@ const cloudinaryEmptyEl = document.getElementById("cloudinary-empty");
 
 let apiBaseUrl = "";
 let playlist = [];
+let overlayEnabledState = true;
 let cloudinaryConfig = {
   enabled: false,
   cloudName: "",
@@ -81,6 +83,10 @@ function normalizePlaylistItem(item) {
   const normalized = { src, type };
   if (type === "image") {
     normalized.duration = Math.max(1000, Number(item?.duration) || cloudinaryConfig.defaultImageDurationMs);
+    const title = String(item?.title || "").trim();
+    if (title) {
+      normalized.title = title.slice(0, 120);
+    }
   }
 
   const publicId = String(item?.publicId || "").trim();
@@ -89,6 +95,50 @@ function normalizePlaylistItem(item) {
   }
 
   return normalized;
+}
+
+function parseBooleanValue(value) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["false", "0", "off", "no"].includes(normalized)) {
+      return false;
+    }
+    if (["true", "1", "on", "yes"].includes(normalized)) {
+      return true;
+    }
+  }
+  return null;
+}
+
+function readOverlayStateFromStorage() {
+  try {
+    return parseBooleanValue(window.localStorage.getItem(OVERLAY_STATE_STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function writeOverlayStateToStorage(value) {
+  try {
+    window.localStorage.setItem(OVERLAY_STATE_STORAGE_KEY, value ? "true" : "false");
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function renderOverlayToggleButton() {
+  if (!overlayToggleBtnEl) {
+    return;
+  }
+  overlayToggleBtnEl.textContent = overlayEnabledState ? "Overlay: ON" : "Overlay: OFF";
+  overlayToggleBtnEl.classList.toggle("is-on", overlayEnabledState);
+  overlayToggleBtnEl.classList.toggle("is-off", !overlayEnabledState);
 }
 
 function buildApiUrl(pathname) {
@@ -184,15 +234,36 @@ async function ensureAuthenticated() {
 
 async function loadSettings() {
   const payload = await requestJson(buildApiUrl(SETTINGS_API_URL), { cache: "no-store" });
-  overlayToggleEl.checked = payload.overlayEnabled !== false;
+  const apiValue = payload.overlayEnabled !== false;
+  const storedValue = readOverlayStateFromStorage();
+  overlayEnabledState = payload.persistent === false && storedValue !== null ? storedValue : apiValue;
+  renderOverlayToggleButton();
+  writeOverlayStateToStorage(overlayEnabledState);
+
+  // If server state reset but browser remembers user's last selection, push it back.
+  if (overlayEnabledState !== apiValue) {
+    await requestJson(buildApiUrl(SETTINGS_API_URL), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ overlayEnabled: overlayEnabledState })
+    });
+  }
 }
 
-async function saveSettings() {
+async function saveSettings(nextValue, showSuccess = true) {
+  overlayEnabledState = Boolean(nextValue);
+  renderOverlayToggleButton();
+  writeOverlayStateToStorage(overlayEnabledState);
+
   await requestJson(buildApiUrl(SETTINGS_API_URL), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ overlayEnabled: overlayToggleEl.checked })
+    body: JSON.stringify({ overlayEnabled: overlayEnabledState })
   });
+
+  if (showSuccess) {
+    showStatus("Overlay setting updated.");
+  }
 }
 
 async function loadPlaylist() {
@@ -228,6 +299,47 @@ function swapItems(fromIndex, toIndex) {
   next[toIndex] = temp;
   playlist = next;
   renderPlaylist();
+}
+
+function inferPublicIdFromCloudinaryVideoUrl(src) {
+  const value = String(src || "").trim();
+  if (!value.includes("/video/upload/")) {
+    return "";
+  }
+  try {
+    const parsed = new URL(value);
+    const marker = "/video/upload/";
+    const markerIdx = parsed.pathname.indexOf(marker);
+    if (markerIdx < 0) {
+      return "";
+    }
+
+    const tail = parsed.pathname.slice(markerIdx + marker.length);
+    const segments = tail.split("/").filter(Boolean);
+    if (!segments.length) {
+      return "";
+    }
+
+    const versionIndex = segments.findIndex((part) => /^v\d+$/.test(part));
+    const publicSegments = versionIndex >= 0 ? segments.slice(versionIndex + 1) : segments;
+    if (!publicSegments.length) {
+      return "";
+    }
+
+    const filePart = publicSegments[publicSegments.length - 1];
+    publicSegments[publicSegments.length - 1] = filePart.replace(/\.[a-z0-9]+$/i, "");
+    return publicSegments.join("/");
+  } catch {
+    return "";
+  }
+}
+
+function getVideoThumbnailUrl(item) {
+  const publicId = String(item?.publicId || "").trim() || inferPublicIdFromCloudinaryVideoUrl(item?.src);
+  if (!publicId || !cloudinaryConfig.cloudName) {
+    return "";
+  }
+  return `https://res.cloudinary.com/${encodeURIComponent(cloudinaryConfig.cloudName)}/video/upload/so_0,f_jpg,w_640,c_fill/${publicId}.jpg`;
 }
 
 function renderPlaylist() {
@@ -297,6 +409,27 @@ function renderPlaylist() {
     actions.append(upBtn, downBtn, removeBtn);
 
     if (item.type === "image") {
+      const titleLabel = document.createElement("label");
+      titleLabel.textContent = "Heading";
+
+      const titleInput = document.createElement("input");
+      titleInput.type = "text";
+      titleInput.maxLength = 120;
+      titleInput.value = String(item.title || "");
+      titleInput.placeholder = "Image heading";
+      titleInput.addEventListener("input", () => {
+        item.title = String(titleInput.value || "").trim().slice(0, 120);
+      });
+      titleInput.addEventListener("change", async () => {
+        try {
+          await savePlaylistWithStatus("Image heading updated.");
+        } catch (error) {
+          showStatus(error.message || "Unable to save content list", true);
+        }
+      });
+      titleLabel.appendChild(titleInput);
+      actions.appendChild(titleLabel);
+
       const durationLabel = document.createElement("label");
       durationLabel.textContent = "Duration (ms)";
 
@@ -322,65 +455,15 @@ function renderPlaylist() {
 
     card.appendChild(actions);
 
-    if (item.type === "image") {
-      const preview = document.createElement("img");
-      preview.className = "cloudinary-preview";
-      preview.src = item.src;
-      preview.alt = item.publicId || "Cloudinary image";
-      preview.addEventListener("error", () => preview.remove(), { once: true });
-      card.appendChild(preview);
-    } else if (item.type === "video") {
-      const preview = document.createElement("img");
-      preview.className = "cloudinary-preview";
-      preview.src = getVideoThumbnailUrl(item);
-      preview.alt = item.publicId || "Cloudinary video thumbnail";
-      preview.addEventListener("error", () => preview.remove(), { once: true });
-      card.appendChild(preview);
-    }
+    const preview = document.createElement("img");
+    preview.className = "cloudinary-preview";
+    preview.src = item.type === "video" ? getVideoThumbnailUrl(item) : item.src;
+    preview.alt = item.publicId || (item.type === "video" ? "Cloudinary video thumbnail" : "Cloudinary image");
+    preview.addEventListener("error", () => preview.remove(), { once: true });
+    card.appendChild(preview);
 
     cloudinaryListEl.appendChild(card);
   });
-}
-
-function inferPublicIdFromCloudinaryVideoUrl(src) {
-  const value = String(src || "").trim();
-  if (!value.includes("/video/upload/")) {
-    return "";
-  }
-  try {
-    const parsed = new URL(value);
-    const marker = "/video/upload/";
-    const markerIdx = parsed.pathname.indexOf(marker);
-    if (markerIdx < 0) {
-      return "";
-    }
-
-    const tail = parsed.pathname.slice(markerIdx + marker.length);
-    const segments = tail.split("/").filter(Boolean);
-    if (!segments.length) {
-      return "";
-    }
-
-    const versionIndex = segments.findIndex((part) => /^v\d+$/.test(part));
-    const publicSegments = versionIndex >= 0 ? segments.slice(versionIndex + 1) : segments;
-    if (!publicSegments.length) {
-      return "";
-    }
-
-    const filePart = publicSegments[publicSegments.length - 1];
-    publicSegments[publicSegments.length - 1] = filePart.replace(/\.[a-z0-9]+$/i, "");
-    return publicSegments.join("/");
-  } catch {
-    return "";
-  }
-}
-
-function getVideoThumbnailUrl(item) {
-  const publicId = String(item?.publicId || "").trim() || inferPublicIdFromCloudinaryVideoUrl(item?.src);
-  if (!publicId || !cloudinaryConfig.cloudName) {
-    return "";
-  }
-  return `https://res.cloudinary.com/${encodeURIComponent(cloudinaryConfig.cloudName)}/video/upload/so_0,f_jpg,w_640,c_fill/${publicId}.jpg`;
 }
 
 async function getUploadSignature(resourceType) {
@@ -391,7 +474,7 @@ async function getUploadSignature(resourceType) {
   });
 }
 
-function mapCloudinaryUploadToPlaylistItem(payload, fallbackType) {
+function mapCloudinaryUploadToPlaylistItem(payload, fallbackType, imageTitle) {
   const type = String(payload?.resource_type || fallbackType || "").toLowerCase() === "video" ? "video" : "image";
   const src = String(payload?.secure_url || "").trim();
   const publicId = String(payload?.public_id || "").trim();
@@ -405,11 +488,15 @@ function mapCloudinaryUploadToPlaylistItem(payload, fallbackType) {
   }
   if (type === "image") {
     item.duration = cloudinaryConfig.defaultImageDurationMs;
+    const title = String(imageTitle || "").trim();
+    if (title) {
+      item.title = title.slice(0, 120);
+    }
   }
   return item;
 }
 
-async function uploadUnsignedFile(file, resourceType, uploadPreset) {
+async function uploadUnsignedFile(file, resourceType, uploadPreset, imageTitle) {
   const uploadUrl = `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudinaryConfig.cloudName)}/${resourceType}/upload`;
   const body = new FormData();
   body.append("file", file);
@@ -432,10 +519,10 @@ async function uploadUnsignedFile(file, resourceType, uploadPreset) {
   } catch {
     payload = {};
   }
-  return mapCloudinaryUploadToPlaylistItem(payload, resourceType);
+  return mapCloudinaryUploadToPlaylistItem(payload, resourceType, imageTitle);
 }
 
-async function uploadSingleFile(file) {
+async function uploadSingleFile(file, imageTitle) {
   const resourceType = file.type.startsWith("video/") ? "video" : "image";
 
   if (cloudinaryConfig.uploadMode !== "signed") {
@@ -443,7 +530,7 @@ async function uploadSingleFile(file) {
     if (!preset) {
       throw new Error("Unsigned mode requires cloudinary.uploadPreset in runtime-config.json");
     }
-    return uploadUnsignedFile(file, resourceType, preset);
+    return uploadUnsignedFile(file, resourceType, preset, imageTitle);
   }
 
   let signed = null;
@@ -454,7 +541,7 @@ async function uploadSingleFile(file) {
     if (!canFallbackUnsigned) {
       throw error;
     }
-    return uploadUnsignedFile(file, resourceType, cloudinaryConfig.uploadPreset);
+    return uploadUnsignedFile(file, resourceType, cloudinaryConfig.uploadPreset, imageTitle);
   }
 
   if (signed?.mode === "unsigned" || signed?.uploadPreset) {
@@ -462,7 +549,7 @@ async function uploadSingleFile(file) {
     if (!preset) {
       throw new Error("Cloudinary upload preset is missing for unsigned mode.");
     }
-    return uploadUnsignedFile(file, resourceType, preset);
+    return uploadUnsignedFile(file, resourceType, preset, imageTitle);
   }
 
   const uploadUrl = `https://api.cloudinary.com/v1_1/${encodeURIComponent(signed.cloudName)}/${resourceType}/upload`;
@@ -489,7 +576,7 @@ async function uploadSingleFile(file) {
   } catch {
     payload = {};
   }
-  return mapCloudinaryUploadToPlaylistItem(payload, resourceType);
+  return mapCloudinaryUploadToPlaylistItem(payload, resourceType, imageTitle);
 }
 
 async function handleUploadClick() {
@@ -503,6 +590,8 @@ async function handleUploadClick() {
     return;
   }
 
+  const imageTitle = String(uploadImageTitleEl.value || "").trim().slice(0, 120);
+
   uploadCloudinaryBtn.disabled = true;
   refreshCloudinaryBtn.disabled = true;
 
@@ -510,7 +599,7 @@ async function handleUploadClick() {
     let uploaded = 0;
     for (const file of files) {
       showStatus(`Uploading ${uploaded + 1}/${files.length}: ${file.name}`);
-      const uploadedItem = await uploadSingleFile(file);
+      const uploadedItem = await uploadSingleFile(file, imageTitle);
       if (uploadedItem) {
         playlist.push(uploadedItem);
       }
@@ -518,9 +607,8 @@ async function handleUploadClick() {
     }
 
     cloudinaryFilesEl.value = "";
-    await savePlaylist();
-    renderPlaylist();
-    showStatus(`Uploaded ${uploaded} file(s) and added to content list.`);
+    uploadImageTitleEl.value = "";
+    await savePlaylistWithStatus(`Uploaded ${uploaded} file(s) and added to content list.`);
   } catch (error) {
     if ((error.message || "").includes("Unauthorized")) {
       window.location.replace("/admin-login.html");
@@ -537,29 +625,21 @@ async function handleUploadClick() {
   }
 }
 
-saveSettingsBtn.addEventListener("click", async () => {
+overlayToggleBtnEl.addEventListener("click", async () => {
+  const nextValue = !overlayEnabledState;
+  overlayToggleBtnEl.disabled = true;
   try {
-    await saveSettings();
-    showStatus("Overlay setting updated.");
+    await saveSettings(nextValue, true);
   } catch (error) {
     if ((error.message || "").includes("Unauthorized")) {
       window.location.replace("/admin-login.html");
       return;
     }
     showStatus(error.message || "Save settings failed", true);
-  }
-});
-
-overlayToggleEl.addEventListener("change", async () => {
-  try {
-    await saveSettings();
-    showStatus("Overlay setting updated.");
-  } catch (error) {
-    if ((error.message || "").includes("Unauthorized")) {
-      window.location.replace("/admin-login.html");
-      return;
-    }
-    showStatus(error.message || "Save settings failed", true);
+    overlayEnabledState = !nextValue;
+    renderOverlayToggleButton();
+  } finally {
+    overlayToggleBtnEl.disabled = false;
   }
 });
 
@@ -587,10 +667,16 @@ async function initAdmin() {
   await loadRuntimeConfig();
   await ensureAuthenticated();
   renderCloudinaryConfigStatus();
+  renderOverlayToggleButton();
 
   try {
     await loadSettings();
   } catch (error) {
+    const storedValue = readOverlayStateFromStorage();
+    if (storedValue !== null) {
+      overlayEnabledState = storedValue;
+      renderOverlayToggleButton();
+    }
     showStatus(error.message || "Failed to load overlay settings", true);
   }
 

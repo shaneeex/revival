@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Revival Signage Admin</title>
-  <link rel="stylesheet" href="admin.css?v=20260314j" />
+  <link rel="stylesheet" href="admin.css?v=20260314p" />
 </head>
 <body>
   <main class="admin-shell">
@@ -19,11 +19,7 @@
     <section class="card">
       <h2>Overlay Control</h2>
       <div class="row">
-        <label class="toggle-wrap" for="overlay-toggle">
-          <input id="overlay-toggle" type="checkbox" />
-          <span>Enable "Time Up" overlay</span>
-        </label>
-        <button id="save-settings-btn" type="button">Save Overlay Setting</button>
+        <button id="overlay-toggle-btn" type="button" class="toggle-button">Overlay: ON</button>
       </div>
     </section>
 
@@ -38,6 +34,8 @@
       <div class="upload-form">
         <label for="cloudinary-files">Select images/videos</label>
         <input id="cloudinary-files" type="file" multiple accept="image/*,video/*" />
+        <label for="upload-image-title">Image Heading (optional)</label>
+        <input id="upload-image-title" type="text" maxlength="120" placeholder="Example: REVIVAL TRAINING SESSION" />
         <button id="upload-cloudinary-btn" type="button">Upload to Cloudinary</button>
       </div>
       <div id="cloudinary-empty" class="muted">No content items configured yet.</div>
@@ -47,6 +45,6 @@
     <div id="status" class="status" role="status" aria-live="polite"></div>
   </main>
 
-  <script src="admin.js?v=20260314l"></script>
+  <script src="admin.js?v=20260314p"></script>
 </body>
 </html>

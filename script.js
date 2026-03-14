@@ -589,11 +589,20 @@ function normalizeMediaItem(item) {
     ? srcInput
     : `media/${srcInput}`;
 
-  return {
+  const normalized = {
     src,
     type,
     duration: Number(item.duration) || (type === "video" ? 0 : DEFAULT_IMAGE_MS)
   };
+
+  if (type === "image") {
+    const title = normalizeInlineText(item?.title || "");
+    if (title) {
+      normalized.title = title.slice(0, 120);
+    }
+  }
+
+  return normalized;
 }
 
 async function fetchCloudinaryResourceList(resourceType) {
@@ -988,6 +997,24 @@ function showMediaSlide() {
   img.alt = "Signage media";
   img.addEventListener("error", () => scheduleNextSlide(400), { once: true });
   shell.appendChild(img);
+
+  const title = normalizeInlineText(item.title || "");
+  if (title) {
+    const caption = document.createElement("div");
+    caption.className = "image-slide-headline";
+
+    const kicker = document.createElement("div");
+    kicker.className = "image-slide-kicker";
+    kicker.textContent = "PHOTO";
+
+    const heading = document.createElement("h3");
+    heading.className = "image-slide-title";
+    heading.textContent = title;
+
+    caption.append(kicker, heading);
+    shell.appendChild(caption);
+  }
+
   mediaContainer.appendChild(shell);
   scheduleNextSlide(imageDurationMs);
 }

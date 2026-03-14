@@ -88,6 +88,10 @@ function normalizePlaylistItems(items) {
 
       if (type === "image") {
         normalized.duration = Math.max(1000, Number(item?.duration) || DEFAULT_IMAGE_MS);
+        const title = String(item?.title || "").trim();
+        if (title) {
+          normalized.title = title.slice(0, 120);
+        }
       }
 
       const publicId = String(item?.publicId || "").trim();

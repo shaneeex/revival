@@ -76,6 +76,24 @@ body {
   gap: 8px;
 }
 
+.toggle-button {
+  min-width: 170px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border-color: #2e4569;
+  background: #1a2740;
+}
+
+.toggle-button.is-on {
+  border-color: #20774f;
+  background: linear-gradient(180deg, #22a769, #18784c);
+}
+
+.toggle-button.is-off {
+  border-color: #8a3345;
+  background: linear-gradient(180deg, #c4445f, #8f2e44);
+}
+
 input,
 button {
   font: inherit;
