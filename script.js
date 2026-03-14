@@ -602,6 +602,9 @@ async function fetchCloudinaryResourceList(resourceType) {
   const url = `https://res.cloudinary.com/${encodeURIComponent(cloudName)}/${resourceType}/list/${encodeURIComponent(tag)}.json?max_results=${maxItems}&_=${bust}`;
   const response = await fetchWithTimeout(url, { cache: "no-store" });
 
+  if (response.status === 401) {
+    throw new Error("Cloudinary list blocked (HTTP 401). Enable Resource list in Cloudinary settings.");
+  }
   if (response.status === 404) {
     return [];
   }
