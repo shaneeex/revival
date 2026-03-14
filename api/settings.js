@@ -1,4 +1,5 @@
 let inMemoryOverlayEnabled = true;
+const { isAuthenticated } = require("./_lib/session");
 
 function parseBoolean(value, fallback = true) {
   if (typeof value === "boolean") {
@@ -95,6 +96,11 @@ module.exports = async (req, res) => {
   }
 
   if (req.method === "PUT") {
+    if (!isAuthenticated(req)) {
+      res.status(401).json({ ok: false, error: "Unauthorized" });
+      return;
+    }
+
     const next = parseBoolean(req.body?.overlayEnabled, true);
     inMemoryOverlayEnabled = next;
 

@@ -1,11 +1,10 @@
 {
-  "apiBaseUrl": "",
+  "apiBaseUrl": "https://revival.movillive.com",
   "cloudinary": {
-    "enabled": false,
-    "cloudName": "",
-    "uploadPreset": "",
+    "enabled": true,
+    "cloudName": "dvduldrv7",
     "tag": "signage",
-    "folder": "revival/signage",
+    "folder": "revival",
     "defaultImageDurationMs": 10000,
     "maxItems": 80
   }

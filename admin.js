@@ -1,4 +1,7 @@
 const SETTINGS_API_URL = "/api/settings";
+const SESSION_API_URL = "/api/session";
+const LOGOUT_API_URL = "/api/logout";
+const SIGNATURE_API_URL = "/api/cloudinary-signature";
 const RUNTIME_CONFIG_URL = "runtime-config.json";
 const API_BASE_STORAGE_KEY = "signageApiBaseUrl";
 const FETCH_TIMEOUT_MS = 15000;
@@ -8,6 +11,7 @@ const CLOUDINARY_DEFAULT_MAX_ITEMS = 80;
 const statusEl = document.getElementById("status");
 const overlayToggleEl = document.getElementById("overlay-toggle");
 const saveSettingsBtn = document.getElementById("save-settings-btn");
+const logoutBtn = document.getElementById("logout-btn");
 const cloudinaryConfigEl = document.getElementById("cloudinary-config");
 const cloudinaryFilesEl = document.getElementById("cloudinary-files");
 const uploadCloudinaryBtn = document.getElementById("upload-cloudinary-btn");
@@ -19,7 +23,6 @@ let apiBaseUrl = "";
 let cloudinaryConfig = {
   enabled: false,
   cloudName: "",
-  uploadPreset: "",
   tag: CLOUDINARY_DEFAULT_TAG,
   folder: "",
   defaultImageDurationMs: 10000,
@@ -42,7 +45,6 @@ function normalizeApiBaseUrl(value) {
 function normalizeCloudinaryConfig(value) {
   const raw = value && typeof value === "object" ? value : {};
   const cloudName = String(raw.cloudName || "").trim();
-  const uploadPreset = String(raw.uploadPreset || "").trim();
   const tag = String(raw.tag || CLOUDINARY_DEFAULT_TAG).trim() || CLOUDINARY_DEFAULT_TAG;
   const folder = String(raw.folder || "").trim().replace(/^\/+|\/+$/g, "");
   const defaultImageDurationMs = Math.max(1000, Number(raw.defaultImageDurationMs) || 10000);
@@ -51,7 +53,6 @@ function normalizeCloudinaryConfig(value) {
   return {
     enabled: Boolean(raw.enabled) && Boolean(cloudName) && Boolean(tag),
     cloudName,
-    uploadPreset,
     tag,
     folder,
     defaultImageDurationMs,
@@ -80,7 +81,10 @@ async function fetchWithTimeout(url, options) {
 }
 
 async function requestJson(url, options) {
-  const response = await fetchWithTimeout(url, options);
+  const response = await fetchWithTimeout(url, {
+    credentials: "same-origin",
+    ...options
+  });
   const text = await response.text();
   let payload = {};
   try {
@@ -90,8 +94,8 @@ async function requestJson(url, options) {
   }
 
   if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error("API not found (404).");
+    if (response.status === 401) {
+      throw new Error("Unauthorized. Please login again.");
     }
     throw new Error(payload?.error || `${response.status} ${response.statusText}`);
   }
@@ -126,15 +130,22 @@ async function loadRuntimeConfig() {
 }
 
 function renderCloudinaryConfigStatus() {
-  const ready = cloudinaryConfig.enabled && cloudinaryConfig.uploadPreset;
-  if (ready) {
+  if (cloudinaryConfig.enabled) {
     cloudinaryConfigEl.textContent = `Connected: ${cloudinaryConfig.cloudName} | tag: ${cloudinaryConfig.tag} | folder: ${cloudinaryConfig.folder || "(root)"}`;
     cloudinaryConfigEl.classList.remove("error-text");
     return;
   }
 
-  cloudinaryConfigEl.textContent = "Cloudinary is not ready. Set runtime-config.json cloudinary.enabled=true plus cloudName and uploadPreset.";
+  cloudinaryConfigEl.textContent = "Cloudinary list is not enabled. Set runtime-config.json cloudinary.enabled=true, cloudName, and tag.";
   cloudinaryConfigEl.classList.add("error-text");
+}
+
+async function ensureAuthenticated() {
+  const payload = await requestJson(buildApiUrl(SESSION_API_URL), { cache: "no-store" });
+  if (!payload?.authenticated) {
+    window.location.replace("/admin-login.html");
+    throw new Error("Unauthorized");
+  }
 }
 
 async function loadSettings() {
@@ -150,27 +161,35 @@ async function saveSettings() {
   });
 }
 
-function getCloudinaryUploadUrl(file) {
-  const resourceType = file.type.startsWith("video/") ? "video" : "image";
-  return `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudinaryConfig.cloudName)}/${resourceType}/upload`;
+async function getUploadSignature(resourceType) {
+  return requestJson(buildApiUrl(SIGNATURE_API_URL), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ resourceType })
+  });
 }
 
 async function uploadSingleFile(file) {
-  const url = getCloudinaryUploadUrl(file);
+  const resourceType = file.type.startsWith("video/") ? "video" : "image";
+  const signed = await getUploadSignature(resourceType);
+
+  const uploadUrl = `https://api.cloudinary.com/v1_1/${encodeURIComponent(signed.cloudName)}/${resourceType}/upload`;
   const body = new FormData();
   body.append("file", file);
-  body.append("upload_preset", cloudinaryConfig.uploadPreset);
-  if (cloudinaryConfig.folder) {
-    body.append("folder", cloudinaryConfig.folder);
+  body.append("api_key", signed.apiKey);
+  body.append("timestamp", String(signed.timestamp));
+  body.append("signature", signed.signature);
+  if (signed.folder) {
+    body.append("folder", signed.folder);
   }
-  if (cloudinaryConfig.tag) {
-    body.append("tags", cloudinaryConfig.tag);
+  if (signed.tags) {
+    body.append("tags", signed.tags);
   }
 
-  const response = await fetchWithTimeout(url, { method: "POST", body });
+  const response = await fetchWithTimeout(uploadUrl, { method: "POST", body });
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Upload failed for ${file.name}: ${response.status} ${errorText}`.slice(0, 240));
+    throw new Error(`Upload failed for ${file.name}: ${response.status} ${errorText}`.slice(0, 260));
   }
 }
 
@@ -255,8 +274,8 @@ async function handleUploadClick() {
     showStatus("Select at least one file to upload.", true);
     return;
   }
-  if (!cloudinaryConfig.enabled || !cloudinaryConfig.uploadPreset) {
-    showStatus("Cloudinary is not configured. Update runtime-config.json first.", true);
+  if (!cloudinaryConfig.enabled) {
+    showStatus("Cloudinary is not enabled in runtime-config.json.", true);
     return;
   }
 
@@ -273,8 +292,12 @@ async function handleUploadClick() {
 
     cloudinaryFilesEl.value = "";
     await refreshCloudinaryList();
-    showStatus(`Uploaded ${uploaded} file(s). Signage will auto-pull from Cloudinary.`);
+    showStatus(`Uploaded ${uploaded} file(s). Signage auto-pulls new media in about 1 minute.`);
   } catch (error) {
+    if ((error.message || "").includes("Unauthorized")) {
+      window.location.replace("/admin-login.html");
+      return;
+    }
     showStatus(error.message || "Cloudinary upload failed", true);
   } finally {
     uploadCloudinaryBtn.disabled = false;
@@ -287,6 +310,10 @@ saveSettingsBtn.addEventListener("click", async () => {
     await saveSettings();
     showStatus("Overlay setting updated.");
   } catch (error) {
+    if ((error.message || "").includes("Unauthorized")) {
+      window.location.replace("/admin-login.html");
+      return;
+    }
     showStatus(error.message || "Save settings failed", true);
   }
 });
@@ -296,6 +323,10 @@ overlayToggleEl.addEventListener("change", async () => {
     await saveSettings();
     showStatus("Overlay setting updated.");
   } catch (error) {
+    if ((error.message || "").includes("Unauthorized")) {
+      window.location.replace("/admin-login.html");
+      return;
+    }
     showStatus(error.message || "Save settings failed", true);
   }
 });
@@ -310,8 +341,18 @@ refreshCloudinaryBtn.addEventListener("click", async () => {
   }
 });
 
+logoutBtn.addEventListener("click", async () => {
+  try {
+    await requestJson(buildApiUrl(LOGOUT_API_URL), { method: "POST" });
+  } catch {
+    // Force logout redirect regardless of API status.
+  }
+  window.location.replace("/admin-login.html");
+});
+
 async function initAdmin() {
   await loadRuntimeConfig();
+  await ensureAuthenticated();
   renderCloudinaryConfigStatus();
 
   try {
@@ -327,10 +368,15 @@ async function initAdmin() {
     }
   } catch (error) {
     showStatus(
-      `${error.message || "Cloudinary list failed"} Enable Cloudinary 'Resource list' for tagged media.`,
+      `${error.message || "Cloudinary list failed"} Enable Cloudinary Resource list for tagged media.`,
       true
     );
   }
 }
 
-initAdmin();
+initAdmin().catch((error) => {
+  if ((error.message || "").includes("Unauthorized")) {
+    return;
+  }
+  showStatus(error.message || "Failed to initialize admin", true);
+});

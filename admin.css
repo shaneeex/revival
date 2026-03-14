@@ -30,6 +30,13 @@ body {
   font-size: clamp(1.4rem, 3.4vw, 2.2rem);
 }
 
+.admin-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .admin-header p {
   margin: 0 0 16px;
   color: var(--muted);
@@ -75,7 +82,9 @@ button {
 }
 
 input[type="file"],
-input[type="number"] {
+input[type="number"],
+input[type="text"],
+input[type="password"] {
   width: 100%;
   background: #0c1320;
   color: var(--text);
@@ -123,6 +132,10 @@ button.secondary,
 
 .error-text {
   color: #ffb3b3;
+}
+
+.login-card {
+  max-width: 520px;
 }
 
 .upload-form label {

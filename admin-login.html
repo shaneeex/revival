@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Revival Admin Login</title>
+  <link rel="stylesheet" href="admin.css?v=20260314h" />
+</head>
+<body>
+  <main class="admin-shell">
+    <header class="admin-header">
+      <h1>Revival Signage Admin</h1>
+      <p>Sign in to manage overlay and upload media to Cloudinary.</p>
+    </header>
+
+    <section class="card login-card">
+      <h2>Admin Login</h2>
+      <form id="login-form" class="upload-form" autocomplete="on">
+        <label for="login-username">Username</label>
+        <input id="login-username" type="text" autocomplete="username" required />
+
+        <label for="login-password">Password</label>
+        <input id="login-password" type="password" autocomplete="current-password" required />
+
+        <button id="login-btn" type="submit">Login</button>
+      </form>
+      <div id="login-status" class="status" role="status" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <script src="admin-login.js?v=20260314h"></script>
+</body>
+</html>
