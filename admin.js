@@ -23,6 +23,7 @@ let apiBaseUrl = "";
 let cloudinaryConfig = {
   enabled: false,
   cloudName: "",
+  uploadPreset: "",
   tag: CLOUDINARY_DEFAULT_TAG,
   folder: "",
   defaultImageDurationMs: 10000,
@@ -45,6 +46,7 @@ function normalizeApiBaseUrl(value) {
 function normalizeCloudinaryConfig(value) {
   const raw = value && typeof value === "object" ? value : {};
   const cloudName = String(raw.cloudName || "").trim();
+  const uploadPreset = String(raw.uploadPreset || "").trim();
   const tag = String(raw.tag || CLOUDINARY_DEFAULT_TAG).trim() || CLOUDINARY_DEFAULT_TAG;
   const folder = String(raw.folder || "").trim().replace(/^\/+|\/+$/g, "");
   const defaultImageDurationMs = Math.max(1000, Number(raw.defaultImageDurationMs) || 10000);
@@ -53,6 +55,7 @@ function normalizeCloudinaryConfig(value) {
   return {
     enabled: Boolean(raw.enabled) && Boolean(cloudName) && Boolean(tag),
     cloudName,
+    uploadPreset,
     tag,
     folder,
     defaultImageDurationMs,
@@ -131,7 +134,8 @@ async function loadRuntimeConfig() {
 
 function renderCloudinaryConfigStatus() {
   if (cloudinaryConfig.enabled) {
-    cloudinaryConfigEl.textContent = `Connected: ${cloudinaryConfig.cloudName} | tag: ${cloudinaryConfig.tag} | folder: ${cloudinaryConfig.folder || "(root)"}`;
+    const modeText = cloudinaryConfig.uploadPreset ? "signed+unsigned ready" : "signed-only (env required)";
+    cloudinaryConfigEl.textContent = `Connected: ${cloudinaryConfig.cloudName} | tag: ${cloudinaryConfig.tag} | folder: ${cloudinaryConfig.folder || "(root)"} | ${modeText}`;
     cloudinaryConfigEl.classList.remove("error-text");
     return;
   }
@@ -169,9 +173,47 @@ async function getUploadSignature(resourceType) {
   });
 }
 
+async function uploadUnsignedFile(file, resourceType, uploadPreset) {
+  const uploadUrl = `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudinaryConfig.cloudName)}/${resourceType}/upload`;
+  const body = new FormData();
+  body.append("file", file);
+  body.append("upload_preset", uploadPreset);
+  if (cloudinaryConfig.folder) {
+    body.append("folder", cloudinaryConfig.folder);
+  }
+  if (cloudinaryConfig.tag) {
+    body.append("tags", cloudinaryConfig.tag);
+  }
+
+  const response = await fetchWithTimeout(uploadUrl, { method: "POST", body });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Upload failed for ${file.name}: ${response.status} ${errorText}`.slice(0, 260));
+  }
+}
+
 async function uploadSingleFile(file) {
   const resourceType = file.type.startsWith("video/") ? "video" : "image";
-  const signed = await getUploadSignature(resourceType);
+  let signed = null;
+  try {
+    signed = await getUploadSignature(resourceType);
+  } catch (error) {
+    const canFallbackUnsigned = Boolean(cloudinaryConfig.uploadPreset);
+    if (!canFallbackUnsigned) {
+      throw error;
+    }
+    await uploadUnsignedFile(file, resourceType, cloudinaryConfig.uploadPreset);
+    return;
+  }
+
+  if (signed?.mode === "unsigned" || signed?.uploadPreset) {
+    const preset = String(signed.uploadPreset || cloudinaryConfig.uploadPreset || "").trim();
+    if (!preset) {
+      throw new Error("Cloudinary upload preset is missing for unsigned mode.");
+    }
+    await uploadUnsignedFile(file, resourceType, preset);
+    return;
+  }
 
   const uploadUrl = `https://api.cloudinary.com/v1_1/${encodeURIComponent(signed.cloudName)}/${resourceType}/upload`;
   const body = new FormData();

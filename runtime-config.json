@@ -3,6 +3,7 @@
   "cloudinary": {
     "enabled": true,
     "cloudName": "dvduldrv7",
+    "uploadPreset": "signage",
     "tag": "signage",
     "folder": "revival",
     "defaultImageDurationMs": 10000,
