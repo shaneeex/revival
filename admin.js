@@ -14,7 +14,6 @@ const CLOUDINARY_DEFAULT_MAX_ITEMS = 80;
 const statusEl = document.getElementById("status");
 const overlayToggleEl = document.getElementById("overlay-toggle");
 const saveSettingsBtn = document.getElementById("save-settings-btn");
-const savePlaylistBtn = document.getElementById("save-playlist-btn");
 const logoutBtn = document.getElementById("logout-btn");
 const cloudinaryConfigEl = document.getElementById("cloudinary-config");
 const cloudinaryFilesEl = document.getElementById("cloudinary-files");
@@ -214,6 +213,7 @@ async function savePlaylist() {
 
 async function savePlaylistWithStatus(message = "Content list saved.") {
   await savePlaylist();
+  await loadPlaylist();
   renderPlaylist();
   showStatus(message);
 }
@@ -329,10 +329,58 @@ function renderPlaylist() {
       preview.alt = item.publicId || "Cloudinary image";
       preview.addEventListener("error", () => preview.remove(), { once: true });
       card.appendChild(preview);
+    } else if (item.type === "video") {
+      const preview = document.createElement("img");
+      preview.className = "cloudinary-preview";
+      preview.src = getVideoThumbnailUrl(item);
+      preview.alt = item.publicId || "Cloudinary video thumbnail";
+      preview.addEventListener("error", () => preview.remove(), { once: true });
+      card.appendChild(preview);
     }
 
     cloudinaryListEl.appendChild(card);
   });
+}
+
+function inferPublicIdFromCloudinaryVideoUrl(src) {
+  const value = String(src || "").trim();
+  if (!value.includes("/video/upload/")) {
+    return "";
+  }
+  try {
+    const parsed = new URL(value);
+    const marker = "/video/upload/";
+    const markerIdx = parsed.pathname.indexOf(marker);
+    if (markerIdx < 0) {
+      return "";
+    }
+
+    const tail = parsed.pathname.slice(markerIdx + marker.length);
+    const segments = tail.split("/").filter(Boolean);
+    if (!segments.length) {
+      return "";
+    }
+
+    const versionIndex = segments.findIndex((part) => /^v\d+$/.test(part));
+    const publicSegments = versionIndex >= 0 ? segments.slice(versionIndex + 1) : segments;
+    if (!publicSegments.length) {
+      return "";
+    }
+
+    const filePart = publicSegments[publicSegments.length - 1];
+    publicSegments[publicSegments.length - 1] = filePart.replace(/\.[a-z0-9]+$/i, "");
+    return publicSegments.join("/");
+  } catch {
+    return "";
+  }
+}
+
+function getVideoThumbnailUrl(item) {
+  const publicId = String(item?.publicId || "").trim() || inferPublicIdFromCloudinaryVideoUrl(item?.src);
+  if (!publicId || !cloudinaryConfig.cloudName) {
+    return "";
+  }
+  return `https://res.cloudinary.com/${encodeURIComponent(cloudinaryConfig.cloudName)}/video/upload/so_0,f_jpg,w_640,c_fill/${publicId}.jpg`;
 }
 
 async function getUploadSignature(resourceType) {
@@ -457,7 +505,6 @@ async function handleUploadClick() {
 
   uploadCloudinaryBtn.disabled = true;
   refreshCloudinaryBtn.disabled = true;
-  savePlaylistBtn.disabled = true;
 
   try {
     let uploaded = 0;
@@ -487,7 +534,6 @@ async function handleUploadClick() {
   } finally {
     uploadCloudinaryBtn.disabled = false;
     refreshCloudinaryBtn.disabled = false;
-    savePlaylistBtn.disabled = false;
   }
 }
 
@@ -514,18 +560,6 @@ overlayToggleEl.addEventListener("change", async () => {
       return;
     }
     showStatus(error.message || "Save settings failed", true);
-  }
-});
-
-savePlaylistBtn.addEventListener("click", async () => {
-  try {
-    await savePlaylistWithStatus("Content list saved.");
-  } catch (error) {
-    if ((error.message || "").includes("Unauthorized")) {
-      window.location.replace("/admin-login.html");
-      return;
-    }
-    showStatus(error.message || "Unable to save content list", true);
   }
 });
 
