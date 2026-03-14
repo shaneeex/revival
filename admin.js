@@ -234,14 +234,17 @@ async function loadRuntimeConfig() {
 }
 
 function renderCloudinaryConfigStatus() {
+  if (!cloudinaryConfigEl) {
+    return;
+  }
+
   if (cloudinaryConfig.enabled) {
-    const modeText = cloudinaryConfig.uploadMode === "signed" ? "signed mode" : "unsigned preset mode";
-    cloudinaryConfigEl.textContent = `Connected: ${cloudinaryConfig.cloudName} | tag: ${cloudinaryConfig.tag} | folder: ${cloudinaryConfig.folder || "(root)"} | ${modeText}`;
+    cloudinaryConfigEl.textContent = "";
     cloudinaryConfigEl.classList.remove("error-text");
     return;
   }
 
-  cloudinaryConfigEl.textContent = "Cloudinary is not enabled. Set cloudinary.enabled=true in runtime-config.json.";
+  cloudinaryConfigEl.textContent = "Upload service is not enabled.";
   cloudinaryConfigEl.classList.add("error-text");
 }
 
@@ -631,14 +634,16 @@ async function handleUploadClick() {
     return;
   }
   if (!cloudinaryConfig.enabled) {
-    showStatus("Cloudinary is not enabled in runtime-config.json.", true);
+    showStatus("Upload service is not enabled.", true);
     return;
   }
 
-  const imageTitle = String(uploadImageTitleEl.value || "").trim().slice(0, 120);
+  const imageTitle = String(uploadImageTitleEl?.value || "").trim().slice(0, 120);
 
   uploadCloudinaryBtn.disabled = true;
-  refreshCloudinaryBtn.disabled = true;
+  if (refreshCloudinaryBtn) {
+    refreshCloudinaryBtn.disabled = true;
+  }
 
   try {
     let uploaded = 0;
@@ -666,7 +671,9 @@ async function handleUploadClick() {
     }
 
     cloudinaryFilesEl.value = "";
-    uploadImageTitleEl.value = "";
+    if (uploadImageTitleEl) {
+      uploadImageTitleEl.value = "";
+    }
     await loadPlaylist();
     renderPlaylist();
 
@@ -677,10 +684,12 @@ async function handleUploadClick() {
       showStatus(`Uploaded ${uploaded} file(s) and added to content list.`);
     }
   } catch (error) {
-    showStatus(error.message || "Cloudinary upload failed", true);
+    showStatus(error.message || "Upload failed", true);
   } finally {
     uploadCloudinaryBtn.disabled = false;
-    refreshCloudinaryBtn.disabled = false;
+    if (refreshCloudinaryBtn) {
+      refreshCloudinaryBtn.disabled = false;
+    }
   }
 }
 
@@ -703,15 +712,17 @@ overlayToggleBtnEl.addEventListener("click", async () => {
 });
 
 uploadCloudinaryBtn.addEventListener("click", handleUploadClick);
-refreshCloudinaryBtn.addEventListener("click", async () => {
-  try {
-    await loadPlaylist();
-    renderPlaylist();
-    showStatus("Content list reloaded.");
-  } catch (error) {
-    showStatus(error.message || "Unable to reload content list", true);
-  }
-});
+if (refreshCloudinaryBtn) {
+  refreshCloudinaryBtn.addEventListener("click", async () => {
+    try {
+      await loadPlaylist();
+      renderPlaylist();
+      showStatus("Content list reloaded.");
+    } catch (error) {
+      showStatus(error.message || "Unable to reload content list", true);
+    }
+  });
+}
 
 logoutBtn.addEventListener("click", async () => {
   try {

@@ -13,7 +13,7 @@
         <h1>Revival Signage Admin</h1>
         <button id="logout-btn" type="button" class="secondary">Logout</button>
       </div>
-      <p>Upload directly to Cloudinary and control overlay behavior.</p>
+      <p>Upload content and control overlay behavior.</p>
       <div id="persistence-warning" class="warning-banner hidden" role="status" aria-live="polite"></div>
     </header>
 
@@ -25,19 +25,13 @@
     </section>
 
     <section class="card">
-      <div class="card-head cloudinary-head">
-        <h2>Cloudinary Upload</h2>
-        <div class="card-actions">
-          <button id="refresh-cloudinary-btn" type="button" class="secondary">Reload</button>
-        </div>
-      </div>
-      <p id="cloudinary-config" class="muted"></p>
+      <h2>Upload Content</h2>
+      <p id="cloudinary-config" class="muted hidden"></p>
       <div class="upload-form">
-        <label for="cloudinary-files">Select images/videos</label>
+        <label for="cloudinary-files">Select files</label>
         <input id="cloudinary-files" type="file" multiple accept="image/*,video/*" />
-        <label for="upload-image-title">Image Heading (optional)</label>
-        <input id="upload-image-title" type="text" maxlength="120" placeholder="Example: REVIVAL TRAINING SESSION" />
-        <button id="upload-cloudinary-btn" type="button">Upload to Cloudinary</button>
+        <input id="upload-image-title" type="text" maxlength="120" placeholder="Optional heading for images" class="hidden" />
+        <button id="upload-cloudinary-btn" type="button">Upload</button>
       </div>
       <div id="cloudinary-empty" class="muted">No content items configured yet.</div>
       <div id="cloudinary-list" class="playlist-list"></div>
@@ -46,6 +40,6 @@
     <div id="status" class="status" role="status" aria-live="polite"></div>
   </main>
 
-  <script src="admin.js?v=20260315a"></script>
+  <script src="admin.js?v=20260315b"></script>
 </body>
 </html>
