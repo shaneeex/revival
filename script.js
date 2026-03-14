@@ -1051,6 +1051,23 @@ async function fetchNewsFromWpApi() {
     .filter((item) => item.title);
 }
 
+async function fetchNewsFromBackendProxy() {
+  const response = await fetchWithTimeout(buildApiUrl("/api/news"), { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`News proxy HTTP ${response.status}`);
+  }
+
+  const payload = await response.json();
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  return items
+    .map((item) => ({
+      title: normalizeInlineText(item?.title || ""),
+      details: htmlToReadableText(item?.details || ""),
+      imageUrl: String(item?.imageUrl || "").trim()
+    }))
+    .filter((item) => item.title);
+}
+
 async function fetchNewsFromWpApiSimple() {
   const response = await fetchWithTimeout(
     "https://revivalsports.mv/wp-json/wp/v2/posts?per_page=10&_fields=title,content,excerpt",
@@ -1151,6 +1168,7 @@ async function fetchWithTimeout(url, options) {
 
 async function refreshNews() {
   const loaders = [
+    fetchNewsFromBackendProxy,
     fetchNewsFromWpApi,
     fetchNewsFromWpApiSimple,
     fetchNewsFromFeedProxy,
