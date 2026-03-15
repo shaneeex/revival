@@ -116,6 +116,12 @@ function buildApiUrl(pathname) {
   return `${apiBaseUrl}${pathname.startsWith("/") ? pathname : `/${pathname}`}`;
 }
 
+function buildNoCacheApiUrl(pathname) {
+  const url = buildApiUrl(pathname);
+  const sep = url.includes("?") ? "&" : "?";
+  return `${url}${sep}_=${Date.now()}`;
+}
+
 async function loadRuntimeConfig() {
   try {
     const response = await fetchWithTimeout(RUNTIME_CONFIG_URL, { cache: "no-store" });
@@ -412,7 +418,7 @@ function applyOverlayEnabled(value) {
 
 async function refreshRuntimeSettings() {
   try {
-    const response = await fetchWithTimeout(buildApiUrl(SETTINGS_API_URL), { cache: "no-store" });
+    const response = await fetchWithTimeout(buildNoCacheApiUrl(SETTINGS_API_URL), { cache: "no-store" });
     if (!response.ok) {
       return;
     }
@@ -723,7 +729,7 @@ async function loadCloudinaryPlaylist() {
 async function loadPlaylist() {
   // Use managed playlist from backend so all clients (web + screen) stay in sync.
   try {
-    const response = await fetchWithTimeout(buildApiUrl(PLAYLIST_API_URL), { cache: "no-store" });
+    const response = await fetchWithTimeout(buildNoCacheApiUrl(PLAYLIST_API_URL), { cache: "no-store" });
     if (response.ok) {
       const contentType = (response.headers.get("content-type") || "").toLowerCase();
       if (contentType.includes("application/json")) {
@@ -1048,7 +1054,7 @@ async function fetchNewsFromWpApi() {
 }
 
 async function fetchNewsFromBackendProxy() {
-  const response = await fetchWithTimeout(buildApiUrl("/api/news"), { cache: "no-store" });
+  const response = await fetchWithTimeout(buildNoCacheApiUrl("/api/news"), { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`News proxy HTTP ${response.status}`);
   }

@@ -237,6 +237,8 @@ async function writePlaylist(items) {
 
 module.exports = async (req, res) => {
   setCors(res);
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  res.setHeader("Pragma", "no-cache");
 
   if (req.method === "OPTIONS") {
     res.status(204).end();

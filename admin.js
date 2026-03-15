@@ -179,6 +179,12 @@ function buildApiUrl(pathname) {
   return `${apiBaseUrl}${pathname.startsWith("/") ? pathname : `/${pathname}`}`;
 }
 
+function buildNoCacheApiUrl(pathname) {
+  const url = buildApiUrl(pathname);
+  const sep = url.includes("?") ? "&" : "?";
+  return `${url}${sep}_=${Date.now()}`;
+}
+
 async function fetchWithTimeout(url, options, timeoutMs = FETCH_TIMEOUT_MS) {
   const controller = new AbortController();
   const timeoutId = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
@@ -257,7 +263,7 @@ async function ensureAuthenticated() {
 }
 
 async function loadSettings() {
-  const payload = await requestJson(buildApiUrl(SETTINGS_API_URL), { cache: "no-store" });
+  const payload = await requestJson(buildNoCacheApiUrl(SETTINGS_API_URL), { cache: "no-store" });
   const apiValue = payload.overlayEnabled !== false;
   const storedValue = readOverlayStateFromStorage();
   settingsPersistence = {
@@ -303,7 +309,7 @@ async function saveSettings(nextValue, showSuccess = true) {
 }
 
 async function loadPlaylist() {
-  const payload = await requestJson(buildApiUrl(PLAYLIST_API_URL), { cache: "no-store" });
+  const payload = await requestJson(buildNoCacheApiUrl(PLAYLIST_API_URL), { cache: "no-store" });
   const rawItems = Array.isArray(payload?.items) ? payload.items : [];
   playlist = rawItems.map(normalizePlaylistItem).filter(Boolean);
   playlistPersistence = {
