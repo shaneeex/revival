@@ -4,11 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Revival Signage Admin</title>
-  <link rel="stylesheet" href="admin.css?v=20260315a" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="admin.css?v=20260316a" />
 </head>
 <body>
   <main class="admin-shell">
-    <header class="admin-header">
+    <header class="admin-header card">
       <div class="admin-header-row">
         <h1>Revival Signage Admin</h1>
         <button id="logout-btn" type="button" class="secondary">Logout</button>
@@ -33,6 +36,11 @@
         <label for="upload-image-title">Heading (optional for images)</label>
         <input id="upload-image-title" type="text" maxlength="120" placeholder="Enter heading" />
         <button id="upload-cloudinary-btn" type="button">Upload</button>
+        <div class="media-guide">
+          <h3>Recommended Media Specs</h3>
+          <p>Images: 1080×1920 (portrait), JPG/PNG/WebP, under 3 MB.</p>
+          <p>Videos: 1080×1920, MP4 (H.264 + AAC), 24/30 FPS, under 60 MB.</p>
+        </div>
       </div>
       <div id="cloudinary-empty" class="muted">No content items configured yet.</div>
       <div id="cloudinary-list" class="playlist-list"></div>
@@ -41,6 +49,6 @@
     <div id="status" class="status" role="status" aria-live="polite"></div>
   </main>
 
-  <script src="admin.js?v=20260315d"></script>
+  <script src="admin.js?v=20260316a"></script>
 </body>
 </html>
