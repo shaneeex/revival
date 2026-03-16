@@ -1,4 +1,4 @@
-const CACHE_NAME = "revival-signage-v51";
+const CACHE_NAME = "revival-signage-v55";
 const PRECACHE_URLS = [
   "./",
   "./index.html",
@@ -15,10 +15,14 @@ const PRECACHE_URLS = [
   "./admin.js?v=20260315b",
   "./runtime-config.json",
   "./styles.css",
+  "./styles.css?v=20260316h",
+  "./styles.css?v=20260316g",
+  "./styles.css?v=20260316f",
   "./styles.css?v=20260316e",
   "./styles.css?v=20260316d",
   "./styles.css?v=20260315e",
   "./script.js",
+  "./script.js?v=20260316d",
   "./script.js?v=20260316c",
   "./script.js?v=20260316b",
   "./manifest.webmanifest"

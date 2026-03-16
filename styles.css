@@ -153,7 +153,7 @@ body {
 }
 
 .brand-mark {
-  height: clamp(2.2rem, 5vh, 4.2rem);
+  height: clamp(2.5rem, 5.6vh, 4.9rem);
   width: auto;
   object-fit: contain;
   background: transparent !important;
@@ -161,10 +161,7 @@ body {
   border-radius: 0;
   padding: 0;
   box-shadow: none;
-  filter:
-    drop-shadow(0 0 0.16vh rgba(255, 255, 255, 0.35))
-    drop-shadow(0 0 0.42vh rgba(255, 74, 109, 0.45))
-    drop-shadow(0 0 0.78vh rgba(199, 21, 53, 0.22));
+  filter: none;
 }
 
 .brand-title {
@@ -318,6 +315,7 @@ body {
 }
 
 #logo-section {
+  --logo-v-pad: 0.68vh;
   position: relative;
   border-top: 0.22vh solid var(--red-1);
   border-bottom: 0.18vh solid rgba(255, 67, 98, 0.55);
@@ -326,15 +324,16 @@ body {
     linear-gradient(180deg, #131b28 0%, #0d1420 100%);
   display: grid;
   align-items: center;
-  padding: 0.4vh 1.05vh 0.55vh;
+  padding: var(--logo-v-pad) 1.05vh;
 }
 
 #marquee-section {
+  position: relative;
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
   gap: 0.8vh;
-  padding: 0.35vh 0.7vh;
+  padding: 0.35vh 3.9vh 0.35vh 0.7vh;
   border-top: 0.2vh solid rgba(255, 59, 90, 0.75);
   background: linear-gradient(180deg, #7f0f23 0%, #550916 100%);
   overflow: hidden;
@@ -382,26 +381,32 @@ body {
   height: 100%;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: clamp(0.35rem, 0.9vh, 0.8rem);
+  gap: clamp(0.42rem, 1.1vh, 1rem);
   align-items: center;
-  padding-right: clamp(3.1rem, 7.2vh, 5.2rem);
+  padding-right: 0;
 }
 
 .qr-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 0.58vh;
   min-height: 0;
+  justify-self: start;
 }
 
 .qr-item-right {
-  justify-content: flex-end;
+  grid-template-columns: minmax(0, 1fr) auto;
+  justify-self: end;
+}
+
+.qr-item-right .qr-meta {
   text-align: right;
 }
 
 .qr-code {
-  width: clamp(3.1rem, 5.8vh, 5.5rem);
-  height: clamp(3.1rem, 5.8vh, 5.5rem);
+  width: clamp(3.6rem, 6.8vh, 6.5rem);
+  height: clamp(3.6rem, 6.8vh, 6.5rem);
   border-radius: 0.22vh;
   border: 0;
   background: #fff;
@@ -418,7 +423,7 @@ body {
 
 .qr-label {
   font-family: "Barlow Condensed", sans-serif;
-  font-size: clamp(0.6rem, 1.18vh, 0.88rem);
+  font-size: clamp(0.66rem, 1.34vh, 1rem);
   font-weight: 700;
   letter-spacing: 0.11em;
   color: #ffe8ad;
@@ -428,7 +433,7 @@ body {
 
 .qr-value {
   font-family: "Barlow Condensed", sans-serif;
-  font-size: clamp(0.7rem, 1.45vh, 1.08rem);
+  font-size: clamp(0.78rem, 1.62vh, 1.22rem);
   font-weight: 700;
   letter-spacing: 0.045em;
   color: #f8fbff;
@@ -442,43 +447,35 @@ body {
   display: grid;
   justify-items: center;
   align-content: center;
-  gap: 0.22vh;
-  min-width: clamp(3.2rem, 6vh, 5.8rem);
+  gap: 0;
+  min-width: clamp(4rem, 7.2vh, 6.8rem);
+  justify-self: center;
 }
 
 .contact-revival-logo {
-  width: clamp(2.2rem, 4.4vh, 4.2rem);
-  height: clamp(2.2rem, 4.4vh, 4.2rem);
+  width: clamp(3.4rem, 6.4vh, 6rem);
+  height: clamp(3.4rem, 6.4vh, 6rem);
   object-fit: contain;
-  filter:
-    drop-shadow(0 0.08vh 0.24vh rgba(255, 255, 255, 0.22))
-    drop-shadow(0 0.28vh 0.5vh rgba(0, 0, 0, 0.55));
+  filter: drop-shadow(0 0.2vh 0.5vh rgba(0, 0, 0, 0.45));
 }
 
-.contact-center-text {
-  font-family: "Barlow Condensed", sans-serif;
-  font-size: clamp(0.52rem, 1.05vh, 0.78rem);
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  color: rgba(247, 251, 255, 0.8);
-  white-space: nowrap;
-}
-
-.mib-corner-logo {
+.mib-marquee-logo {
   position: absolute;
-  right: 0.7vh;
-  bottom: 0.55vh;
-  width: clamp(1.6rem, 3.1vh, 2.8rem);
-  height: clamp(1.6rem, 3.1vh, 2.8rem);
+  right: 0.72vh;
+  bottom: 0.28vh;
+  width: clamp(1.55rem, 2.9vh, 2.6rem);
+  height: clamp(1.55rem, 2.9vh, 2.6rem);
   object-fit: contain;
-  opacity: 0.92;
+  opacity: 0.95;
   filter: drop-shadow(0 0.12vh 0.32vh rgba(0, 0, 0, 0.5));
+  z-index: 6;
+  pointer-events: none;
 }
 
 @media (max-width: 560px) {
   .contact-strip {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    padding-right: clamp(2.6rem, 6vh, 4.2rem);
+    padding-right: 0;
   }
 
   .contact-center-brand {

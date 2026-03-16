@@ -472,10 +472,10 @@ function buildMarqueeMessage() {
     .slice(0, 8);
 
   if (!titles.length) {
-    return `REVIVAL SPORTS${TICKER_SEP}Latest updates coming soon${TICKER_SEP}Stay tuned`;
+    return `LATEST NEWS${TICKER_SEP}Latest updates coming soon${TICKER_SEP}Stay tuned`;
   }
 
-  return `REVIVAL SPORTS${TICKER_SEP}${titles.join(TICKER_SEP)}`;
+  return `LATEST NEWS${TICKER_SEP}${titles.join(TICKER_SEP)}`;
 }
 
 function updateMarqueeContent(message) {
@@ -483,7 +483,7 @@ function updateMarqueeContent(message) {
     return;
   }
 
-  const text = (message || "").trim() || `REVIVAL SPORTS${TICKER_SEP}Latest updates coming soon`;
+  const text = (message || "").trim() || `LATEST NEWS${TICKER_SEP}Latest updates coming soon`;
   marqueeTrackEl.innerHTML = "";
 
   const first = document.createElement("span");
@@ -874,7 +874,7 @@ function showNewsSlide() {
 
   const kicker = document.createElement("div");
   kicker.className = "news-slide-kicker";
-  kicker.textContent = "NEWS";
+  kicker.textContent = "LATEST NEWS";
 
   const title = document.createElement("h2");
   title.className = "news-slide-title";
