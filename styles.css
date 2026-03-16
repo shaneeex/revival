@@ -381,52 +381,54 @@ body {
   width: 100%;
   height: 100%;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: clamp(0.5rem, 1.2vh, 1rem);
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: clamp(0.35rem, 0.9vh, 0.8rem);
   align-items: center;
   padding-right: clamp(3.1rem, 7.2vh, 5.2rem);
 }
 
 .qr-item {
-  height: 100%;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  display: flex;
   align-items: center;
-  column-gap: 0.68vh;
-  background: linear-gradient(180deg, rgba(8, 14, 22, 0.64), rgba(8, 14, 22, 0.88));
-  border: 0.1vh solid rgba(255, 84, 112, 0.36);
-  border-radius: 0.6vh;
-  padding: 0.4vh 0.6vh;
+  gap: 0.58vh;
+  min-height: 0;
+}
+
+.qr-item-right {
+  justify-content: flex-end;
+  text-align: right;
 }
 
 .qr-code {
-  width: clamp(2.8rem, 5.3vh, 4.9rem);
-  height: clamp(2.8rem, 5.3vh, 4.9rem);
-  border-radius: 0.3vh;
-  border: 0.08vh solid rgba(255, 255, 255, 0.25);
+  width: clamp(3.1rem, 5.8vh, 5.5rem);
+  height: clamp(3.1rem, 5.8vh, 5.5rem);
+  border-radius: 0.22vh;
+  border: 0;
   background: #fff;
-  padding: 0.15vh;
+  padding: 0.1vh;
   object-fit: contain;
+  box-shadow: 0 0.16vh 0.6vh rgba(0, 0, 0, 0.45);
+}
+
+.qr-meta {
+  display: grid;
+  row-gap: 0.24vh;
+  min-width: 0;
 }
 
 .qr-label {
-  grid-column: 2;
-  align-self: end;
   font-family: "Barlow Condensed", sans-serif;
-  font-size: clamp(0.62rem, 1.28vh, 0.95rem);
+  font-size: clamp(0.6rem, 1.18vh, 0.88rem);
   font-weight: 700;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.11em;
   color: #ffe8ad;
   text-transform: uppercase;
   line-height: 1;
 }
 
 .qr-value {
-  grid-column: 2;
-  align-self: start;
   font-family: "Barlow Condensed", sans-serif;
-  font-size: clamp(0.68rem, 1.45vh, 1.08rem);
+  font-size: clamp(0.7rem, 1.45vh, 1.08rem);
   font-weight: 700;
   letter-spacing: 0.045em;
   color: #f8fbff;
@@ -436,14 +438,52 @@ body {
   text-overflow: ellipsis;
 }
 
+.contact-center-brand {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 0.22vh;
+  min-width: clamp(3.2rem, 6vh, 5.8rem);
+}
+
+.contact-revival-logo {
+  width: clamp(2.2rem, 4.4vh, 4.2rem);
+  height: clamp(2.2rem, 4.4vh, 4.2rem);
+  object-fit: contain;
+  filter:
+    drop-shadow(0 0.08vh 0.24vh rgba(255, 255, 255, 0.22))
+    drop-shadow(0 0.28vh 0.5vh rgba(0, 0, 0, 0.55));
+}
+
+.contact-center-text {
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: clamp(0.52rem, 1.05vh, 0.78rem);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: rgba(247, 251, 255, 0.8);
+  white-space: nowrap;
+}
+
 .mib-corner-logo {
   position: absolute;
   right: 0.7vh;
   bottom: 0.55vh;
-  width: clamp(1.7rem, 3.7vh, 3.2rem);
-  height: clamp(1.7rem, 3.7vh, 3.2rem);
+  width: clamp(1.6rem, 3.1vh, 2.8rem);
+  height: clamp(1.6rem, 3.1vh, 2.8rem);
   object-fit: contain;
+  opacity: 0.92;
   filter: drop-shadow(0 0.12vh 0.32vh rgba(0, 0, 0, 0.5));
+}
+
+@media (max-width: 560px) {
+  .contact-strip {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    padding-right: clamp(2.6rem, 6vh, 4.2rem);
+  }
+
+  .contact-center-brand {
+    display: none;
+  }
 }
 
 .news-slide {
