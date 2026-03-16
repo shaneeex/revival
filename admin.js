@@ -125,6 +125,77 @@ function normalizePlaylistItem(item) {
   return normalized;
 }
 
+async function fetchCloudinaryResourceList(resourceType) {
+  const cloudName = String(cloudinaryConfig.cloudName || "").trim();
+  const tag = String(cloudinaryConfig.tag || "").trim();
+  const maxItems = Math.max(1, Number(cloudinaryConfig.maxItems) || CLOUDINARY_DEFAULT_MAX_ITEMS);
+  if (!cloudName || !tag) {
+    return [];
+  }
+
+  const url = `https://res.cloudinary.com/${encodeURIComponent(cloudName)}/${resourceType}/list/${encodeURIComponent(tag)}.json?max_results=${maxItems}&_=${Date.now()}`;
+  const response = await fetchWithTimeout(url, { cache: "no-store" });
+  if (response.status === 404) {
+    return [];
+  }
+  if (!response.ok) {
+    throw new Error(`Cloudinary ${resourceType} list HTTP ${response.status}`);
+  }
+
+  const payload = await response.json();
+  return Array.isArray(payload?.resources) ? payload.resources : [];
+}
+
+function mapCloudinaryResourceToPlaylistItem(resource) {
+  const type = String(resource?.resource_type || "").toLowerCase() === "video" ? "video" : "image";
+  const publicId = String(resource?.public_id || "").trim();
+  if (!publicId) {
+    return null;
+  }
+
+  const secureUrl = String(resource?.secure_url || "").trim();
+  if (!secureUrl) {
+    return null;
+  }
+
+  const item = {
+    src: secureUrl,
+    type,
+    publicId,
+    createdAtMs: Date.parse(resource?.created_at || "") || 0
+  };
+
+  if (type === "image") {
+    item.duration = cloudinaryConfig.defaultImageDurationMs;
+  }
+
+  return item;
+}
+
+async function loadCloudinaryFallbackPlaylist() {
+  if (!cloudinaryConfig.enabled) {
+    return [];
+  }
+
+  const [imagesResult, videosResult] = await Promise.allSettled([
+    fetchCloudinaryResourceList("image"),
+    fetchCloudinaryResourceList("video")
+  ]);
+
+  const images = imagesResult.status === "fulfilled" ? imagesResult.value : [];
+  const videos = videosResult.status === "fulfilled" ? videosResult.value : [];
+  if (imagesResult.status === "rejected" && videosResult.status === "rejected") {
+    throw imagesResult.reason || videosResult.reason || new Error("Cloudinary fallback list unavailable");
+  }
+
+  return [...images, ...videos]
+    .map(mapCloudinaryResourceToPlaylistItem)
+    .filter(Boolean)
+    .sort((a, b) => b.createdAtMs - a.createdAtMs)
+    .slice(0, cloudinaryConfig.maxItems)
+    .map(({ createdAtMs, ...item }) => item);
+}
+
 function parseBooleanValue(value) {
   if (typeof value === "boolean") {
     return value;
@@ -309,14 +380,41 @@ async function saveSettings(nextValue, showSuccess = true) {
 }
 
 async function loadPlaylist() {
-  const payload = await requestJson(buildNoCacheApiUrl(PLAYLIST_API_URL), { cache: "no-store" });
-  const rawItems = Array.isArray(payload?.items) ? payload.items : [];
-  playlist = rawItems.map(normalizePlaylistItem).filter(Boolean);
-  playlistPersistence = {
-    persistent: payload.persistent !== false,
-    writable: payload.writable !== false,
-    storage: String(payload.storage || "")
-  };
+  let payload = null;
+  try {
+    payload = await requestJson(buildNoCacheApiUrl(PLAYLIST_API_URL), { cache: "no-store" });
+    const rawItems = Array.isArray(payload?.items) ? payload.items : [];
+    playlist = rawItems.map(normalizePlaylistItem).filter(Boolean);
+    playlistPersistence = {
+      persistent: payload.persistent !== false,
+      writable: payload.writable !== false,
+      storage: String(payload.storage || "")
+    };
+  } catch (error) {
+    playlist = [];
+    playlistPersistence = {
+      persistent: false,
+      writable: false,
+      storage: "unavailable"
+    };
+  }
+
+  if (!playlist.length) {
+    try {
+      const cloudinaryItems = await loadCloudinaryFallbackPlaylist();
+      if (cloudinaryItems.length) {
+        playlist = cloudinaryItems.map(normalizePlaylistItem).filter(Boolean);
+        playlistPersistence = {
+          persistent: true,
+          writable: false,
+          storage: "cloudinary-list"
+        };
+      }
+    } catch {
+      // Keep API result/failure state.
+    }
+  }
+
   renderPersistenceWarning();
 }
 
@@ -397,8 +495,12 @@ function getVideoThumbnailUrl(item) {
 }
 
 function renderPlaylist() {
+  const isReadOnly = playlistPersistence.writable === false;
   cloudinaryListEl.innerHTML = "";
   cloudinaryEmptyEl.classList.toggle("hidden", playlist.length > 0);
+  cloudinaryEmptyEl.textContent = isReadOnly
+    ? "No managed playlist items. Showing Cloudinary list fallback."
+    : "No content items configured yet.";
 
   playlist.forEach((item, index) => {
     const card = document.createElement("div");
@@ -425,6 +527,7 @@ function renderPlaylist() {
     upBtn.type = "button";
     upBtn.className = "secondary";
     upBtn.textContent = "Move Up";
+    upBtn.disabled = isReadOnly;
     upBtn.addEventListener("click", async () => {
       swapItems(index, index - 1);
       try {
@@ -438,6 +541,7 @@ function renderPlaylist() {
     downBtn.type = "button";
     downBtn.className = "secondary";
     downBtn.textContent = "Move Down";
+    downBtn.disabled = isReadOnly;
     downBtn.addEventListener("click", async () => {
       swapItems(index, index + 1);
       try {
@@ -451,6 +555,7 @@ function renderPlaylist() {
     removeBtn.type = "button";
     removeBtn.className = "secondary";
     removeBtn.textContent = "Remove";
+    removeBtn.disabled = isReadOnly;
     removeBtn.addEventListener("click", async () => {
       playlist = playlist.filter((_, i) => i !== index);
       try {
@@ -471,6 +576,7 @@ function renderPlaylist() {
       titleInput.maxLength = 120;
       titleInput.value = String(item.title || "");
       titleInput.placeholder = "Image heading";
+      titleInput.disabled = isReadOnly;
       titleInput.addEventListener("input", () => {
         item.title = String(titleInput.value || "").trim().slice(0, 120);
       });
@@ -492,6 +598,7 @@ function renderPlaylist() {
       durationInput.min = "1000";
       durationInput.step = "500";
       durationInput.value = String(item.duration || cloudinaryConfig.defaultImageDurationMs);
+      durationInput.disabled = isReadOnly;
       durationInput.addEventListener("input", () => {
         item.duration = Math.max(1000, Number(durationInput.value) || cloudinaryConfig.defaultImageDurationMs);
       });
@@ -654,13 +761,18 @@ async function handleUploadClick() {
   try {
     let uploaded = 0;
     const failed = [];
+    let saveFailedCount = 0;
     for (const file of files) {
       showStatus(`Uploading ${uploaded + 1}/${files.length}: ${file.name}`);
       try {
         const uploadedItem = await uploadSingleFile(file, imageTitle);
         if (uploadedItem) {
           playlist.unshift(uploadedItem);
-          await savePlaylist();
+          try {
+            await savePlaylist();
+          } catch {
+            saveFailedCount += 1;
+          }
           uploaded += 1;
         }
       } catch (error) {
@@ -683,9 +795,11 @@ async function handleUploadClick() {
     await loadPlaylist();
     renderPlaylist();
 
-    if (failed.length) {
+    if (failed.length || saveFailedCount > 0) {
       const suffix = failed.length > 2 ? ` (+${failed.length - 2} more)` : "";
-      showStatus(`Uploaded ${uploaded}/${files.length}. ${failed.slice(0, 2).join(" | ")}${suffix}`, true);
+      const failedMsg = failed.slice(0, 2).join(" | ");
+      const saveMsg = saveFailedCount > 0 ? ` Playlist save unavailable for ${saveFailedCount} item(s); using fallback list.` : "";
+      showStatus(`Uploaded ${uploaded}/${files.length}. ${failedMsg}${suffix}${saveMsg}`.trim(), true);
     } else {
       showStatus(`Uploaded ${uploaded} file(s) and added to content list.`);
     }

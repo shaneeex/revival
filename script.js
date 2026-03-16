@@ -1,4 +1,3 @@
-const PLAYLIST_URL = "media/playlist.json";
 const PLAYLIST_API_URL = "/api/playlist";
 const SETTINGS_API_URL = "/api/settings";
 const RUNTIME_CONFIG_URL = "runtime-config.json";
@@ -702,41 +701,28 @@ async function loadPlaylist() {
         const payload = await response.json();
         const rawItems = Array.isArray(payload) ? payload : payload.items;
         const managedItems = (rawItems || []).map(normalizeMediaItem).filter(Boolean);
-        mediaFiles = managedItems;
-        if (!mediaFiles.length) {
-          mediaContainer.innerHTML = '<div class="panel-message">No media in admin content list</div>';
+        if (managedItems.length) {
+          mediaFiles = managedItems;
+          return;
         }
-        return;
       }
     }
   } catch (error) {
     console.warn("Managed playlist load failed:", error);
   }
 
-  // Final fallback only if API is temporarily unavailable.
+  // Fallback to Cloudinary tag list if managed playlist is empty/unavailable.
   try {
-    const response = await fetchWithTimeout(PLAYLIST_URL, { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error(`Playlist HTTP ${response.status}`);
+    const usedCloudinary = await loadCloudinaryPlaylist();
+    if (usedCloudinary) {
+      mediaFiles = mediaFiles.map(normalizeMediaItem).filter(Boolean);
+      return;
     }
-
-    const contentType = (response.headers.get("content-type") || "").toLowerCase();
-    if (!contentType.includes("application/json")) {
-      throw new Error("Fallback playlist is not JSON");
-    }
-
-    const payload = await response.json();
-    const rawItems = Array.isArray(payload) ? payload : payload.items;
-    mediaFiles = (rawItems || []).map(normalizeMediaItem).filter(Boolean);
-    if (!mediaFiles.length) {
-      mediaContainer.innerHTML = '<div class="panel-message">No media in fallback playlist</div>';
-    }
-    console.warn("Using fallback static playlist because API playlist is unavailable.");
-    return;
   } catch (error) {
-    console.error("Playlist load failed:", error);
-    mediaContainer.innerHTML = '<div class="panel-message">Unable to load media playlist</div>';
+    console.warn("Cloudinary playlist load failed:", error);
   }
+
+  mediaFiles = [];
 }
 
 async function refreshMediaSources() {
@@ -752,7 +738,9 @@ async function refreshMediaSources() {
     const changed = nextSignature !== previousSignature;
     mediaStateSignature = nextSignature;
 
-    if (!mediaFiles.length || mediaIndex >= mediaFiles.length) {
+    if (!mediaFiles.length) {
+      mediaIndex = 0;
+    } else if (mediaIndex >= mediaFiles.length) {
       mediaIndex = 0;
     }
 
@@ -998,7 +986,8 @@ function showMediaSlide() {
 
 function showNextSlide() {
   if (!mediaFiles.length && !newsItems.length) {
-    mediaContainer.innerHTML = '<div class="panel-message">No media or news available.</div>';
+    mediaContainer.innerHTML = '<div class="panel-message">Loading news...</div>';
+    scheduleNextSlide(3000);
     return;
   }
 
@@ -1163,6 +1152,9 @@ async function refreshNews() {
       if (items.length) {
         newsItems = items;
         updateMarqueeContent(buildMarqueeMessage());
+        if (!mediaFiles.length) {
+          showNextSlide();
+        }
         return;
       }
     } catch (error) {
@@ -1178,6 +1170,9 @@ async function refreshNews() {
     }
   ];
   updateMarqueeContent(buildMarqueeMessage());
+  if (!mediaFiles.length) {
+    showNextSlide();
+  }
 }
 
 async function init() {
@@ -1185,7 +1180,7 @@ async function init() {
   await refreshRuntimeSettings();
   await refreshMediaSources();
   updateMarqueeContent(buildMarqueeMessage());
-  refreshNews();
+  await refreshNews();
   showNextSlide();
   updateClock();
   window.addEventListener("resize", fitClockText);
@@ -1204,7 +1199,11 @@ async function init() {
       console.warn("Media refresh failed:", error);
     });
   }, PLAYLIST_REFRESH_MS);
-  setInterval(refreshNews, NEWS_REFRESH_MS);
+  setInterval(() => {
+    refreshNews().catch((error) => {
+      console.warn("News refresh failed:", error);
+    });
+  }, NEWS_REFRESH_MS);
 }
 
 init();
