@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700;800&family=Rajdhani:wght@500;700&family=Teko:wght@600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260315e" />
+  <link rel="stylesheet" href="styles.css?v=20260316d" />
 </head>
 <body>
   <div class="stage">
@@ -36,11 +36,35 @@
         </div>
       </section>
 
-      <section id="logo-section" aria-label="Partner Logos">
-        <div class="logo-row">
-          <img src="logos/mib.jpg" onerror="this.onerror=null;this.src='logos/mib.png';" alt="MIB Logo" />
-          <img src="logos/revival.jpg" onerror="this.onerror=null;this.src='logos/revival.png';" alt="Revival Sports Logo" />
+      <section id="logo-section" aria-label="Quick Links and Partner">
+        <div class="contact-strip">
+          <article class="qr-item">
+            <img
+              class="qr-code"
+              src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=https%3A%2F%2Fwww.revivalsports.mv"
+              alt="QR code for Revival Sports website"
+              referrerpolicy="no-referrer"
+            />
+            <div class="qr-label">WEBSITE</div>
+            <div class="qr-value">REVIVALSPORTS.MV</div>
+          </article>
+          <article class="qr-item">
+            <img
+              class="qr-code"
+              src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=https%3A%2F%2Fwww.instagram.com%2Frevivalsports"
+              alt="QR code for Revival Sports Instagram"
+              referrerpolicy="no-referrer"
+            />
+            <div class="qr-label">INSTAGRAM</div>
+            <div class="qr-value">@REVIVALSPORTS</div>
+          </article>
         </div>
+        <img
+          class="mib-corner-logo"
+          src="logos/mib.jpg"
+          onerror="this.onerror=null;this.src='logos/mib.png';"
+          alt="MIB Logo"
+        />
       </section>
 
       <section id="marquee-section" aria-label="Ticker Updates">

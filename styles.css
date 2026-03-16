@@ -318,13 +318,15 @@ body {
 }
 
 #logo-section {
+  position: relative;
   border-top: 0.22vh solid var(--red-1);
   border-bottom: 0.18vh solid rgba(255, 67, 98, 0.55);
-  background: linear-gradient(180deg, #131b28 0%, #0d1420 100%);
-  display: flex;
+  background:
+    linear-gradient(100deg, rgba(191, 24, 59, 0.12), transparent 26%),
+    linear-gradient(180deg, #131b28 0%, #0d1420 100%);
+  display: grid;
   align-items: center;
-  justify-content: center;
-  padding: 0.5vh 1.05vh;
+  padding: 0.4vh 1.05vh 0.55vh;
 }
 
 #marquee-section {
@@ -375,26 +377,73 @@ body {
   color: #f4f8ff;
 }
 
-.logo-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: min(4.2vw, 2.8vh);
+.contact-strip {
   width: 100%;
   height: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(0.5rem, 1.2vh, 1rem);
+  align-items: center;
+  padding-right: clamp(3.1rem, 7.2vh, 5.2rem);
 }
 
-.logo-row img {
-  height: 78%;
-  max-width: 39%;
-  max-height: 8.8vh;
+.qr-item {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 0.68vh;
+  background: linear-gradient(180deg, rgba(8, 14, 22, 0.64), rgba(8, 14, 22, 0.88));
+  border: 0.1vh solid rgba(255, 84, 112, 0.36);
+  border-radius: 0.6vh;
+  padding: 0.4vh 0.6vh;
+}
+
+.qr-code {
+  width: clamp(2.8rem, 5.3vh, 4.9rem);
+  height: clamp(2.8rem, 5.3vh, 4.9rem);
+  border-radius: 0.3vh;
+  border: 0.08vh solid rgba(255, 255, 255, 0.25);
+  background: #fff;
+  padding: 0.15vh;
   object-fit: contain;
-  filter: drop-shadow(0 0.16vh 0.5vh rgba(0, 0, 0, 0.5));
-  animation: none;
 }
 
-.logo-row img:nth-child(2) {
-  animation-delay: 0.9s;
+.qr-label {
+  grid-column: 2;
+  align-self: end;
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: clamp(0.62rem, 1.28vh, 0.95rem);
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  color: #ffe8ad;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.qr-value {
+  grid-column: 2;
+  align-self: start;
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: clamp(0.68rem, 1.45vh, 1.08rem);
+  font-weight: 700;
+  letter-spacing: 0.045em;
+  color: #f8fbff;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mib-corner-logo {
+  position: absolute;
+  right: 0.7vh;
+  bottom: 0.55vh;
+  width: clamp(1.7rem, 3.7vh, 3.2rem);
+  height: clamp(1.7rem, 3.7vh, 3.2rem);
+  object-fit: contain;
+  filter: drop-shadow(0 0.12vh 0.32vh rgba(0, 0, 0, 0.5));
 }
 
 .news-slide {
