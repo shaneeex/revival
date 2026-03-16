@@ -606,26 +606,6 @@ function normalizeMediaItem(item) {
   return normalized;
 }
 
-function titleFromMediaPath(value) {
-  const raw = String(value || "").trim();
-  if (!raw) {
-    return "";
-  }
-
-  try {
-    const asUrl = /^https?:\/\//i.test(raw) ? new URL(raw) : null;
-    const path = asUrl ? asUrl.pathname : raw;
-    const part = decodeURIComponent(path.split("/").filter(Boolean).pop() || "");
-    const withoutExt = part.replace(/\.[a-z0-9]+$/i, "");
-    return withoutExt
-      .replace(/[_-]+/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-  } catch {
-    return raw.replace(/[_-]+/g, " ").trim();
-  }
-}
-
 function createMediaStateSignature(items) {
   return (Array.isArray(items) ? items : [])
     .map((item) => [
@@ -640,21 +620,7 @@ function createMediaStateSignature(items) {
 
 function getImageSlideTitle(item) {
   const explicit = normalizeInlineText(item?.title || "");
-  if (explicit) {
-    return explicit;
-  }
-
-  const fromPublicId = titleFromMediaPath(item?.publicId || "");
-  if (fromPublicId) {
-    return fromPublicId.toUpperCase();
-  }
-
-  const fromSource = titleFromMediaPath(item?.src || "");
-  if (fromSource) {
-    return fromSource.toUpperCase();
-  }
-
-  return "";
+  return explicit ? explicit.slice(0, 120) : "";
 }
 
 async function fetchCloudinaryResourceList(resourceType) {
@@ -977,6 +943,20 @@ function showMediaSlide() {
   }
 
   const imageDurationMs = item.duration || DEFAULT_IMAGE_MS;
+  const headingText = getImageSlideTitle(item);
+
+  if (!headingText) {
+    const img = document.createElement("img");
+    img.className = `slide-item image-item ${getNextImageMotionClass()}`;
+    img.src = item.src;
+    img.alt = "Signage image";
+    img.style.setProperty("--img-motion-ms", `${Math.max(12000, imageDurationMs)}ms`);
+    img.addEventListener("error", () => scheduleNextSlide(400), { once: true });
+    mediaContainer.appendChild(img);
+    scheduleNextSlide(imageDurationMs);
+    return;
+  }
+
   const slide = document.createElement("article");
   slide.className = "news-slide image-media-slide";
 
@@ -1000,7 +980,7 @@ function showMediaSlide() {
 
   const heading = document.createElement("h2");
   heading.className = "news-slide-title";
-  heading.textContent = getImageSlideTitle(item) || "REVIVAL SPORTS";
+  heading.textContent = headingText;
   heading.style.setProperty("--news-title-lines", `${getNewsTitleLineClamp(heading.textContent)}`);
 
   headline.append(kicker, heading);
