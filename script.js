@@ -12,6 +12,8 @@ const TICKER_SEP = " \u2022 ";
 const TICKER_MAX_ENTRIES = 24;
 const TICKER_MAX_CUSTOM_ITEMS = 14;
 const TICKER_WEBSITE_LIMIT = 8;
+const MARQUEE_PX_PER_SECOND = 78;
+const MARQUEE_PX_PER_SECOND_PERF = 58;
 const SETTINGS_REFRESH_MS = 5 * 1000;
 const NEWS_SLIDE_INTERVAL_MS = 10 * 60 * 1000;
 const NEWS_SLIDE_DURATION_MS = 10 * 1000;
@@ -57,6 +59,10 @@ let newsItems = [];
 let newsIndex = 0;
 let customTickerItems = [];
 let marqueeMessageCache = "";
+let marqueeRafId = null;
+let marqueeDistancePx = 0;
+let marqueeOffsetPx = 0;
+let lastMarqueeTickMs = 0;
 let nextNewsSlideAtMs = 0;
 let marqueeWebsiteBurstActive = false;
 let marqueeWebsiteBurstTimeoutId = null;
@@ -627,6 +633,51 @@ function refreshMarqueeFromSources() {
   updateMarqueeContent(message);
 }
 
+function stopMarqueeLoop() {
+  if (marqueeRafId) {
+    cancelAnimationFrame(marqueeRafId);
+    marqueeRafId = null;
+  }
+}
+
+function startMarqueeLoop() {
+  if (!marqueeTrackEl || marqueeDistancePx <= 0) {
+    return;
+  }
+
+  stopMarqueeLoop();
+  marqueeOffsetPx = 0;
+  lastMarqueeTickMs = 0;
+
+  const speedPxPerSecond = IS_ANDROID ? MARQUEE_PX_PER_SECOND_PERF : MARQUEE_PX_PER_SECOND;
+
+  const tick = (timestamp) => {
+    if (!marqueeTrackEl) {
+      stopMarqueeLoop();
+      return;
+    }
+
+    if (!lastMarqueeTickMs) {
+      lastMarqueeTickMs = timestamp;
+    }
+
+    const deltaMs = Math.min(64, Math.max(0, timestamp - lastMarqueeTickMs));
+    lastMarqueeTickMs = timestamp;
+
+    if (!document.hidden) {
+      marqueeOffsetPx -= (speedPxPerSecond * deltaMs) / 1000;
+      if (marqueeOffsetPx <= -marqueeDistancePx) {
+        marqueeOffsetPx += marqueeDistancePx;
+      }
+      marqueeTrackEl.style.transform = `translate3d(${marqueeOffsetPx}px,0,0)`;
+    }
+
+    marqueeRafId = requestAnimationFrame(tick);
+  };
+
+  marqueeRafId = requestAnimationFrame(tick);
+}
+
 function updateMarqueeContent(message) {
   if (!marqueeTrackEl) {
     return;
@@ -634,6 +685,7 @@ function updateMarqueeContent(message) {
 
   const text = (message || "").trim() || `LATEST NEWS${TICKER_SEP}Latest updates coming soon`;
   marqueeTrackEl.innerHTML = "";
+  marqueeTrackEl.style.transform = "translate3d(0,0,0)";
 
   const first = document.createElement("span");
   first.className = "marquee-text";
@@ -651,10 +703,8 @@ function updateMarqueeContent(message) {
 
   requestAnimationFrame(() => {
     const travelPx = first.scrollWidth + spacer.scrollWidth;
-    const pxPerSecond = 90;
-    const durationSec = Math.max(14, travelPx / pxPerSecond);
-    marqueeTrackEl.style.setProperty("--marquee-distance", `${travelPx}px`);
-    marqueeTrackEl.style.setProperty("--marquee-duration", `${durationSec}s`);
+    marqueeDistancePx = Math.max(0, travelPx);
+    startMarqueeLoop();
   });
 }
 
@@ -1365,6 +1415,14 @@ async function init() {
     });
   }
   document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      stopMarqueeLoop();
+      return;
+    }
+
+    if (marqueeDistancePx > 0) {
+      startMarqueeLoop();
+    }
     if (!document.hidden) {
       ensureNextNewsSlideScheduled();
       scheduleMarqueeWebsiteBursts();

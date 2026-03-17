@@ -458,7 +458,8 @@ body {
   min-width: max-content;
   gap: 0;
   will-change: transform;
-  animation: marqueeMove var(--marquee-duration, 22s) linear infinite;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
 }
 
 .marquee-text {
@@ -1238,6 +1239,15 @@ body {
 .perf-mode .media-frame::before,
 .perf-mode .logo-row img {
   animation: none !important;
+}
+
+.perf-mode .marquee-window::before,
+.perf-mode .marquee-window::after {
+  display: none !important;
+}
+
+.perf-mode .marquee-text {
+  text-shadow: none !important;
 }
 
 @media (max-aspect-ratio: 10/16) {
