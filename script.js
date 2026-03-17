@@ -3,15 +3,20 @@ const SETTINGS_API_URL = "/api/settings";
 const RUNTIME_CONFIG_URL = "runtime-config.json";
 const DEFAULT_IMAGE_MS = 10000;
 const DEFAULT_VIDEO_MAX_MS = 90000;
-const MEDIA_SLIDES_PER_NEWS = 3;
-const NEWS_SLIDE_MS = 30000;
 const NEWS_REFRESH_MS = 5 * 60 * 1000;
 const PLAYLIST_REFRESH_MS = 10 * 1000;
 const FETCH_TIMEOUT_MS = 12000;
 const NEWS_TITLE_MIN_FONT_PX = 16;
 const NEWS_TITLE_FONT_STEP_PX = 0.5;
 const TICKER_SEP = " \u2022 ";
+const TICKER_MAX_ENTRIES = 24;
+const TICKER_MAX_CUSTOM_ITEMS = 14;
+const TICKER_WEBSITE_LIMIT = 8;
 const SETTINGS_REFRESH_MS = 5 * 1000;
+const NEWS_SLIDE_INTERVAL_MS = 10 * 60 * 1000;
+const NEWS_SLIDE_DURATION_MS = 10 * 1000;
+const TICKER_WEBSITE_BURST_INTERVAL_MS = 15 * 60 * 1000;
+const TICKER_WEBSITE_BURST_DURATION_MS = 15 * 1000;
 const ALERT_INTERVAL_MS = 60 * 60 * 1000;
 const ALERT_DURATION_MS = 60 * 1000;
 const ALERT_BEEP_INTERVAL_MS = 850;
@@ -42,7 +47,6 @@ const IS_ANDROID = /Android/i.test(navigator.userAgent || "");
 
 let mediaFiles = [];
 let mediaIndex = 0;
-let mediaSlidesSinceNews = 0;
 let mediaTimeoutId = null;
 let mediaStateSignature = "";
 let imageMotionIndex = 0;
@@ -53,6 +57,11 @@ let newsItems = [];
 let newsIndex = 0;
 let customTickerItems = [];
 let marqueeMessageCache = "";
+let nextNewsSlideAtMs = 0;
+let marqueeWebsiteBurstActive = false;
+let marqueeWebsiteBurstTimeoutId = null;
+let marqueeWebsiteBurstIntervalId = null;
+let marqueeWebsiteBurstAlignTimeoutId = null;
 
 let alertHideTimeoutId = null;
 let alertIntervalId = null;
@@ -506,22 +515,107 @@ function normalizeCustomTickerItems(items) {
   return normalized;
 }
 
-function buildMarqueeMessage() {
-  const titles = newsItems
-    .map((item) => (item?.title || "").trim())
+function getMsUntilNextAlignedInterval(intervalMs) {
+  const interval = Math.max(1000, Number(intervalMs) || 1000);
+  const nowMs = Date.now();
+  const remainder = nowMs % interval;
+  return remainder === 0 ? interval : interval - remainder;
+}
+
+function setMarqueeWebsiteBurstActive(active) {
+  const next = Boolean(active);
+  if (marqueeWebsiteBurstActive === next) {
+    return;
+  }
+  marqueeWebsiteBurstActive = next;
+  refreshMarqueeFromSources();
+}
+
+function clearMarqueeWebsiteBurstSchedule() {
+  if (marqueeWebsiteBurstTimeoutId) {
+    clearTimeout(marqueeWebsiteBurstTimeoutId);
+    marqueeWebsiteBurstTimeoutId = null;
+  }
+  if (marqueeWebsiteBurstIntervalId) {
+    clearInterval(marqueeWebsiteBurstIntervalId);
+    marqueeWebsiteBurstIntervalId = null;
+  }
+  if (marqueeWebsiteBurstAlignTimeoutId) {
+    clearTimeout(marqueeWebsiteBurstAlignTimeoutId);
+    marqueeWebsiteBurstAlignTimeoutId = null;
+  }
+}
+
+function startMarqueeWebsiteBurst() {
+  setMarqueeWebsiteBurstActive(true);
+  if (marqueeWebsiteBurstTimeoutId) {
+    clearTimeout(marqueeWebsiteBurstTimeoutId);
+  }
+  marqueeWebsiteBurstTimeoutId = setTimeout(() => {
+    setMarqueeWebsiteBurstActive(false);
+  }, TICKER_WEBSITE_BURST_DURATION_MS);
+}
+
+function scheduleMarqueeWebsiteBursts() {
+  clearMarqueeWebsiteBurstSchedule();
+  setMarqueeWebsiteBurstActive(false);
+
+  const delay = getMsUntilNextAlignedInterval(TICKER_WEBSITE_BURST_INTERVAL_MS);
+  marqueeWebsiteBurstAlignTimeoutId = setTimeout(() => {
+    startMarqueeWebsiteBurst();
+    marqueeWebsiteBurstIntervalId = setInterval(
+      startMarqueeWebsiteBurst,
+      TICKER_WEBSITE_BURST_INTERVAL_MS
+    );
+  }, delay);
+}
+
+function buildWebsiteTickerMessage() {
+  const websiteItems = newsItems
+    .map((item) => normalizeTickerText(item?.title || ""))
     .filter(Boolean)
-    .slice(0, 8)
-    .map(normalizeTickerText)
-    .filter(Boolean);
+    .slice(0, TICKER_WEBSITE_LIMIT);
 
-  const customItems = normalizeCustomTickerItems(customTickerItems).slice(0, 12);
-  const combined = [...customItems, ...titles];
-
-  if (!combined.length) {
-    return `LATEST NEWS${TICKER_SEP}Latest updates coming soon${TICKER_SEP}Stay tuned`;
+  if (!websiteItems.length) {
+    return "";
   }
 
-  return `LATEST NEWS${TICKER_SEP}${combined.join(TICKER_SEP)}`;
+  return `LATEST NEWS${TICKER_SEP}${websiteItems.join(TICKER_SEP)}`;
+}
+
+function buildCustomTickerMessage() {
+  const customItems = normalizeCustomTickerItems(customTickerItems).slice(0, TICKER_MAX_CUSTOM_ITEMS);
+  if (!customItems.length) {
+    return "";
+  }
+
+  const entries = [];
+  while (entries.length < TICKER_MAX_ENTRIES) {
+    entries.push(customItems[entries.length % customItems.length]);
+  }
+
+  return `LATEST NEWS${TICKER_SEP}${entries.join(TICKER_SEP)}`;
+}
+
+function buildMarqueeMessage() {
+  if (marqueeWebsiteBurstActive) {
+    const websiteMessage = buildWebsiteTickerMessage();
+    if (websiteMessage) {
+      return websiteMessage;
+    }
+  }
+
+  const customMessage = buildCustomTickerMessage();
+  if (customMessage) {
+    return customMessage;
+  }
+
+  const websiteMessage = buildWebsiteTickerMessage();
+  if (websiteMessage) {
+    return websiteMessage;
+  }
+
+  return `LATEST NEWS${TICKER_SEP}Latest updates coming soon${TICKER_SEP}Stay tuned`;
 }
 
 function refreshMarqueeFromSources() {
@@ -801,7 +895,6 @@ async function refreshMediaSources() {
 
     // When admin uploads/edits content, switch quickly instead of waiting for long slide/video timeouts.
     if (changed && previousSignature) {
-      mediaSlidesSinceNews = 0;
       scheduleNextSlide(500);
     }
   } finally {
@@ -814,8 +907,32 @@ function scheduleNextSlide(ms) {
   mediaTimeoutId = setTimeout(showNextSlide, ms);
 }
 
+function ensureNextNewsSlideScheduled() {
+  if (nextNewsSlideAtMs > 0) {
+    return;
+  }
+  nextNewsSlideAtMs = Date.now() + getMsUntilNextAlignedInterval(NEWS_SLIDE_INTERVAL_MS);
+}
+
+function advanceNextNewsSlideTime() {
+  if (nextNewsSlideAtMs <= 0) {
+    ensureNextNewsSlideScheduled();
+    return;
+  }
+
+  const now = Date.now();
+  while (nextNewsSlideAtMs <= now) {
+    nextNewsSlideAtMs += NEWS_SLIDE_INTERVAL_MS;
+  }
+}
+
 function shouldShowNewsSlide() {
-  return newsItems.length > 0 && mediaSlidesSinceNews >= MEDIA_SLIDES_PER_NEWS;
+  if (!newsItems.length) {
+    return false;
+  }
+
+  ensureNextNewsSlideScheduled();
+  return Date.now() >= nextNewsSlideAtMs;
 }
 
 function buildNewsBackground(imageUrl) {
@@ -899,7 +1016,7 @@ function showNewsSlide() {
   triggerSlideTransition();
   const item = newsItems[newsIndex];
   newsIndex = (newsIndex + 1) % newsItems.length;
-  mediaSlidesSinceNews = 0;
+  advanceNextNewsSlideTime();
 
   const newsSlide = document.createElement("article");
   newsSlide.className = "news-slide";
@@ -913,7 +1030,7 @@ function showNewsSlide() {
     newsImage.alt = item.title || "News image";
     newsImage.decoding = "async";
     newsImage.loading = "eager";
-    newsImage.style.setProperty("--news-img-motion-ms", `${Math.max(18000, NEWS_SLIDE_MS)}ms`);
+    newsImage.style.setProperty("--news-img-motion-ms", `${Math.max(10000, NEWS_SLIDE_DURATION_MS)}ms`);
     newsImage.addEventListener("error", () => {
       newsImage.remove();
       imageBox.style.backgroundImage = buildNewsBackground("");
@@ -946,7 +1063,7 @@ function showNewsSlide() {
     fitNewsTitleToBox(title, headline, kicker);
     adjustNewsSlideLayout(newsSlide, headline);
   });
-  scheduleNextSlide(NEWS_SLIDE_MS);
+  scheduleNextSlide(NEWS_SLIDE_DURATION_MS);
 }
 
 function showMediaSlide() {
@@ -961,7 +1078,6 @@ function showMediaSlide() {
 
   const item = mediaFiles[mediaIndex];
   mediaIndex = (mediaIndex + 1) % mediaFiles.length;
-  mediaSlidesSinceNews += 1;
 
   mediaContainer.innerHTML = "";
 
@@ -1234,6 +1350,8 @@ async function init() {
   await loadRuntimeConfig();
   await refreshRuntimeSettings();
   await refreshMediaSources();
+  ensureNextNewsSlideScheduled();
+  scheduleMarqueeWebsiteBursts();
   refreshMarqueeFromSources();
   await refreshNews();
   showNextSlide();
@@ -1246,6 +1364,13 @@ async function init() {
       fitVisibleNewsTitle();
     });
   }
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      ensureNextNewsSlideScheduled();
+      scheduleMarqueeWebsiteBursts();
+      refreshMarqueeFromSources();
+    }
+  });
   setupTimeupOverlay();
   setInterval(updateClock, 1000);
   setInterval(refreshRuntimeSettings, SETTINGS_REFRESH_MS);
