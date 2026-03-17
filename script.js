@@ -51,6 +51,8 @@ let mediaRefreshInFlight = false;
 
 let newsItems = [];
 let newsIndex = 0;
+let customTickerItems = [];
+let marqueeMessageCache = "";
 
 let alertHideTimeoutId = null;
 let alertIntervalId = null;
@@ -431,6 +433,13 @@ async function refreshRuntimeSettings() {
     if (payload && Object.prototype.hasOwnProperty.call(payload, "overlayEnabled")) {
       applyOverlayEnabled(parseOverlayEnabledValue(payload.overlayEnabled));
     }
+    if (payload && Object.prototype.hasOwnProperty.call(payload, "customTickerItems")) {
+      const nextCustomItems = normalizeCustomTickerItems(payload.customTickerItems);
+      if (nextCustomItems.join("\n") !== customTickerItems.join("\n")) {
+        customTickerItems = nextCustomItems;
+        refreshMarqueeFromSources();
+      }
+    }
   } catch (error) {
     // Backend can be temporarily unavailable during restarts; keep existing setting.
   }
@@ -465,17 +474,63 @@ function setupTimeupOverlay() {
   }
 }
 
+function normalizeTickerText(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 160);
+}
+
+function normalizeCustomTickerItems(items) {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  const seen = new Set();
+  const normalized = [];
+  for (const item of items) {
+    const text = normalizeTickerText(item);
+    if (!text) {
+      continue;
+    }
+    const key = text.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    normalized.push(text);
+    if (normalized.length >= 40) {
+      break;
+    }
+  }
+  return normalized;
+}
+
 function buildMarqueeMessage() {
   const titles = newsItems
     .map((item) => (item?.title || "").trim())
     .filter(Boolean)
-    .slice(0, 8);
+    .slice(0, 8)
+    .map(normalizeTickerText)
+    .filter(Boolean);
 
-  if (!titles.length) {
+  const customItems = normalizeCustomTickerItems(customTickerItems).slice(0, 12);
+  const combined = [...customItems, ...titles];
+
+  if (!combined.length) {
     return `LATEST NEWS${TICKER_SEP}Latest updates coming soon${TICKER_SEP}Stay tuned`;
   }
 
-  return `LATEST NEWS${TICKER_SEP}${titles.join(TICKER_SEP)}`;
+  return `LATEST NEWS${TICKER_SEP}${combined.join(TICKER_SEP)}`;
+}
+
+function refreshMarqueeFromSources() {
+  const message = buildMarqueeMessage();
+  if (message === marqueeMessageCache) {
+    return;
+  }
+  marqueeMessageCache = message;
+  updateMarqueeContent(message);
 }
 
 function updateMarqueeContent(message) {
@@ -1151,7 +1206,7 @@ async function refreshNews() {
       const items = await loader();
       if (items.length) {
         newsItems = items;
-        updateMarqueeContent(buildMarqueeMessage());
+        refreshMarqueeFromSources();
         if (!mediaFiles.length) {
           showNextSlide();
         }
@@ -1169,7 +1224,7 @@ async function refreshNews() {
       imageUrl: ""
     }
   ];
-  updateMarqueeContent(buildMarqueeMessage());
+  refreshMarqueeFromSources();
   if (!mediaFiles.length) {
     showNextSlide();
   }
@@ -1179,7 +1234,7 @@ async function init() {
   await loadRuntimeConfig();
   await refreshRuntimeSettings();
   await refreshMediaSources();
-  updateMarqueeContent(buildMarqueeMessage());
+  refreshMarqueeFromSources();
   await refreshNews();
   showNextSlide();
   updateClock();

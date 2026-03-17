@@ -1,10 +1,17 @@
 const { isAuthenticated, setCors } = require("./_lib/session");
 const { readJsonState, writeJsonState } = require("./_lib/persistence");
 
-const KV_KEY = "signage:overlayEnabled";
-const CLOUDINARY_STATE_KEY = "overlay-enabled";
+const SETTINGS_KV_KEY = "signage:settings";
+const SETTINGS_CLOUDINARY_STATE_KEY = "settings";
+const LEGACY_OVERLAY_KV_KEY = "signage:overlayEnabled";
+const LEGACY_OVERLAY_CLOUDINARY_KEY = "overlay-enabled";
+const MAX_TICKER_ITEMS = 40;
+const MAX_TICKER_ITEM_LENGTH = 160;
 
-let inMemoryOverlayEnabled = true;
+let inMemorySettings = {
+  overlayEnabled: true,
+  customTickerItems: []
+};
 
 function parseBoolean(value, fallback = true) {
   if (typeof value === "boolean") {
@@ -25,36 +32,123 @@ function parseBoolean(value, fallback = true) {
   return fallback;
 }
 
-async function readOverlaySettings() {
-  const state = await readJsonState({
-    kvKey: KV_KEY,
-    cloudinaryKey: CLOUDINARY_STATE_KEY,
-    memoryValue: inMemoryOverlayEnabled
-  });
+function normalizeTickerText(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, MAX_TICKER_ITEM_LENGTH);
+}
 
-  const overlayEnabled = parseBoolean(state.value, true);
-  inMemoryOverlayEnabled = overlayEnabled;
+function normalizeCustomTickerItems(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set();
+  const normalized = [];
+  for (const item of value) {
+    const text = normalizeTickerText(item);
+    if (!text) {
+      continue;
+    }
+    const dedupeKey = text.toLowerCase();
+    if (seen.has(dedupeKey)) {
+      continue;
+    }
+    seen.add(dedupeKey);
+    normalized.push(text);
+    if (normalized.length >= MAX_TICKER_ITEMS) {
+      break;
+    }
+  }
+
+  return normalized;
+}
+
+function toNormalizedSettings(value, fallback = inMemorySettings) {
+  const next = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const overlayEnabled = parseBoolean(next.overlayEnabled, parseBoolean(fallback?.overlayEnabled, true));
+
+  const fallbackTicker = normalizeCustomTickerItems(fallback?.customTickerItems || []);
+  const customTickerItems = Object.prototype.hasOwnProperty.call(next, "customTickerItems")
+    ? normalizeCustomTickerItems(next.customTickerItems)
+    : fallbackTicker;
 
   return {
     overlayEnabled,
-    persistent: state.persistent,
-    writable: state.writable,
-    storage: state.storage
+    customTickerItems
   };
 }
 
-async function writeOverlaySettings(nextValue) {
-  const overlayEnabled = parseBoolean(nextValue, true);
-  inMemoryOverlayEnabled = overlayEnabled;
-
-  const state = await writeJsonState({
-    kvKey: KV_KEY,
-    cloudinaryKey: CLOUDINARY_STATE_KEY,
-    value: overlayEnabled
+async function readSettings() {
+  const state = await readJsonState({
+    kvKey: SETTINGS_KV_KEY,
+    cloudinaryKey: SETTINGS_CLOUDINARY_STATE_KEY,
+    memoryValue: inMemorySettings
   });
 
+  let settings = toNormalizedSettings(state.value, inMemorySettings);
+  let persistent = state.persistent;
+  let writable = state.writable;
+  let storage = state.storage;
+
+  // Backward compatibility: if new key not persisted yet, pull old overlay key.
+  if (!persistent) {
+    const legacyState = await readJsonState({
+      kvKey: LEGACY_OVERLAY_KV_KEY,
+      cloudinaryKey: LEGACY_OVERLAY_CLOUDINARY_KEY,
+      memoryValue: null
+    });
+
+    if (legacyState.persistent) {
+      settings = {
+        ...settings,
+        overlayEnabled: parseBoolean(legacyState.value, settings.overlayEnabled)
+      };
+      persistent = legacyState.persistent;
+      writable = legacyState.writable;
+      storage = legacyState.storage;
+    }
+  }
+
+  inMemorySettings = settings;
+  return { settings, persistent, writable, storage };
+}
+
+async function writeSettings(nextPartial) {
+  const current = (await readSettings()).settings;
+  const patch = nextPartial && typeof nextPartial === "object" ? nextPartial : {};
+
+  const next = {
+    overlayEnabled: Object.prototype.hasOwnProperty.call(patch, "overlayEnabled")
+      ? parseBoolean(patch.overlayEnabled, current.overlayEnabled)
+      : current.overlayEnabled,
+    customTickerItems: Object.prototype.hasOwnProperty.call(patch, "customTickerItems")
+      ? normalizeCustomTickerItems(patch.customTickerItems)
+      : normalizeCustomTickerItems(current.customTickerItems)
+  };
+
+  inMemorySettings = next;
+
+  const state = await writeJsonState({
+    kvKey: SETTINGS_KV_KEY,
+    cloudinaryKey: SETTINGS_CLOUDINARY_STATE_KEY,
+    value: next
+  });
+
+  // Mirror overlay for older deployments reading legacy overlay-only key.
+  try {
+    await writeJsonState({
+      kvKey: LEGACY_OVERLAY_KV_KEY,
+      cloudinaryKey: LEGACY_OVERLAY_CLOUDINARY_KEY,
+      value: next.overlayEnabled
+    });
+  } catch {
+    // Non-fatal.
+  }
+
   return {
-    overlayEnabled,
+    settings: next,
     persistent: state.persistent,
     writable: state.writable,
     storage: state.storage
@@ -72,8 +166,14 @@ module.exports = async (req, res) => {
   }
 
   if (req.method === "GET") {
-    const payload = await readOverlaySettings();
-    res.status(200).json(payload);
+    const state = await readSettings();
+    res.status(200).json({
+      overlayEnabled: state.settings.overlayEnabled,
+      customTickerItems: state.settings.customTickerItems,
+      persistent: state.persistent,
+      writable: state.writable,
+      storage: state.storage
+    });
     return;
   }
 
@@ -83,8 +183,15 @@ module.exports = async (req, res) => {
       return;
     }
 
-    const payload = await writeOverlaySettings(req.body?.overlayEnabled);
-    res.status(200).json({ ok: true, ...payload });
+    const state = await writeSettings(req.body || {});
+    res.status(200).json({
+      ok: true,
+      overlayEnabled: state.settings.overlayEnabled,
+      customTickerItems: state.settings.customTickerItems,
+      persistent: state.persistent,
+      writable: state.writable,
+      storage: state.storage
+    });
     return;
   }
 

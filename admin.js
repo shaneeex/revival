@@ -10,9 +10,15 @@ const UPLOAD_TIMEOUT_MS = 15 * 60 * 1000;
 const DEFAULT_IMAGE_MS = 10000;
 const CLOUDINARY_DEFAULT_TAG = "signage";
 const CLOUDINARY_DEFAULT_MAX_ITEMS = 80;
+const MAX_CUSTOM_TICKER_ITEMS = 40;
+const MAX_CUSTOM_TICKER_ITEM_LENGTH = 160;
 
 const statusEl = document.getElementById("status");
 const overlayToggleBtnEl = document.getElementById("overlay-toggle-btn");
+const customTickerInputEl = document.getElementById("custom-ticker-input");
+const addCustomTickerBtnEl = document.getElementById("add-custom-ticker-btn");
+const customTickerEmptyEl = document.getElementById("custom-ticker-empty");
+const customTickerListEl = document.getElementById("custom-ticker-list");
 const logoutBtn = document.getElementById("logout-btn");
 const cloudinaryConfigEl = document.getElementById("cloudinary-config");
 const cloudinaryFilesEl = document.getElementById("cloudinary-files");
@@ -26,6 +32,7 @@ const persistenceWarningEl = document.getElementById("persistence-warning");
 let apiBaseUrl = "";
 let playlist = [];
 let overlayEnabledState = true;
+let customTickerItems = [];
 let playlistPersistence = { persistent: true, writable: true, storage: "unknown" };
 let settingsPersistence = { persistent: true, writable: true, storage: "unknown" };
 let cloudinaryConfig = {
@@ -57,7 +64,7 @@ function renderPersistenceWarning() {
   }
 
   if (settingsPersistence.persistent === false) {
-    messages.push("Overlay toggle is temporary and can reset after deployment.");
+    messages.push("Overlay and bottom bar custom text are temporary and can reset after deployment.");
   }
 
   if (!messages.length) {
@@ -215,6 +222,39 @@ function parseBooleanValue(value) {
   return null;
 }
 
+function normalizeCustomTickerItemText(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, MAX_CUSTOM_TICKER_ITEM_LENGTH);
+}
+
+function normalizeCustomTickerItems(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set();
+  const normalized = [];
+  for (const item of value) {
+    const text = normalizeCustomTickerItemText(item);
+    if (!text) {
+      continue;
+    }
+    const key = text.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    normalized.push(text);
+    if (normalized.length >= MAX_CUSTOM_TICKER_ITEMS) {
+      break;
+    }
+  }
+
+  return normalized;
+}
+
 function readOverlayStateFromStorage() {
   try {
     return parseBooleanValue(window.localStorage.getItem(OVERLAY_STATE_STORAGE_KEY));
@@ -238,6 +278,75 @@ function renderOverlayToggleButton() {
   overlayToggleBtnEl.textContent = overlayEnabledState ? "Overlay: ON" : "Overlay: OFF";
   overlayToggleBtnEl.classList.toggle("is-on", overlayEnabledState);
   overlayToggleBtnEl.classList.toggle("is-off", !overlayEnabledState);
+}
+
+async function persistCustomTickerItems(successMessage) {
+  customTickerItems = normalizeCustomTickerItems(customTickerItems);
+  await saveSettingsPatch({ customTickerItems }, successMessage);
+}
+
+function renderCustomTickerList() {
+  if (!customTickerListEl || !customTickerEmptyEl) {
+    return;
+  }
+
+  customTickerListEl.innerHTML = "";
+  customTickerEmptyEl.classList.toggle("hidden", customTickerItems.length > 0);
+
+  customTickerItems.forEach((item, index) => {
+    const row = document.createElement("div");
+    row.className = "ticker-item";
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.maxLength = MAX_CUSTOM_TICKER_ITEM_LENGTH;
+    input.value = item;
+    input.placeholder = "Ticker text";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.className = "secondary";
+    saveBtn.textContent = "Save";
+    saveBtn.addEventListener("click", async () => {
+      const value = normalizeCustomTickerItemText(input.value);
+      if (!value) {
+        showStatus("Ticker text cannot be empty.", true);
+        input.focus();
+        return;
+      }
+
+      customTickerItems[index] = value;
+      try {
+        await persistCustomTickerItems("Ticker text updated.");
+      } catch (error) {
+        showStatus(error.message || "Unable to save ticker text", true);
+      }
+    });
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "secondary";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.addEventListener("click", async () => {
+      customTickerItems = customTickerItems.filter((_, i) => i !== index);
+      try {
+        await persistCustomTickerItems("Ticker text deleted.");
+      } catch (error) {
+        showStatus(error.message || "Unable to delete ticker text", true);
+      }
+    });
+
+    input.addEventListener("keydown", async (event) => {
+      if (event.key !== "Enter") {
+        return;
+      }
+      event.preventDefault();
+      saveBtn.click();
+    });
+
+    row.append(input, saveBtn, deleteBtn);
+    customTickerListEl.appendChild(row);
+  });
 }
 
 function buildApiUrl(pathname) {
@@ -343,30 +452,31 @@ async function loadSettings() {
     storage: String(payload.storage || "")
   };
   overlayEnabledState = payload.persistent === false && storedValue !== null ? storedValue : apiValue;
+  customTickerItems = normalizeCustomTickerItems(payload?.customTickerItems || []);
   renderOverlayToggleButton();
+  renderCustomTickerList();
   writeOverlayStateToStorage(overlayEnabledState);
   renderPersistenceWarning();
 
   // If server state reset but browser remembers user's last selection, push it back.
   if (overlayEnabledState !== apiValue) {
-    await requestJson(buildApiUrl(SETTINGS_API_URL), {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ overlayEnabled: overlayEnabledState })
-    });
+    await saveSettingsPatch({ overlayEnabled: overlayEnabledState }, false);
   }
 }
 
-async function saveSettings(nextValue, showSuccess = true) {
-  overlayEnabledState = Boolean(nextValue);
-  renderOverlayToggleButton();
-  writeOverlayStateToStorage(overlayEnabledState);
-
+async function saveSettingsPatch(patch, successMessage = "") {
   const payload = await requestJson(buildApiUrl(SETTINGS_API_URL), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ overlayEnabled: overlayEnabledState })
+    body: JSON.stringify(patch || {})
   });
+
+  overlayEnabledState = payload.overlayEnabled !== false;
+  customTickerItems = normalizeCustomTickerItems(payload?.customTickerItems || customTickerItems);
+  renderOverlayToggleButton();
+  renderCustomTickerList();
+  writeOverlayStateToStorage(overlayEnabledState);
+
   settingsPersistence = {
     persistent: payload.persistent !== false,
     writable: payload.writable !== false,
@@ -374,8 +484,8 @@ async function saveSettings(nextValue, showSuccess = true) {
   };
   renderPersistenceWarning();
 
-  if (showSuccess) {
-    showStatus("Overlay setting updated.");
+  if (successMessage) {
+    showStatus(successMessage);
   }
 }
 
@@ -817,7 +927,7 @@ overlayToggleBtnEl.addEventListener("click", async () => {
   const nextValue = !overlayEnabledState;
   overlayToggleBtnEl.disabled = true;
   try {
-    await saveSettings(nextValue, true);
+    await saveSettingsPatch({ overlayEnabled: nextValue }, "Overlay setting updated.");
   } catch (error) {
     if ((error.message || "").includes("Unauthorized")) {
       window.location.replace("/admin-login.html");
@@ -830,6 +940,38 @@ overlayToggleBtnEl.addEventListener("click", async () => {
     overlayToggleBtnEl.disabled = false;
   }
 });
+
+if (addCustomTickerBtnEl) {
+  addCustomTickerBtnEl.addEventListener("click", async () => {
+    const value = normalizeCustomTickerItemText(customTickerInputEl?.value || "");
+    if (!value) {
+      showStatus("Type a ticker text before adding.", true);
+      return;
+    }
+
+    customTickerItems = normalizeCustomTickerItems([value, ...customTickerItems]);
+    addCustomTickerBtnEl.disabled = true;
+    try {
+      await persistCustomTickerItems("Ticker text added.");
+      if (customTickerInputEl) {
+        customTickerInputEl.value = "";
+      }
+    } catch (error) {
+      showStatus(error.message || "Unable to add ticker text", true);
+    } finally {
+      addCustomTickerBtnEl.disabled = false;
+    }
+  });
+}
+
+if (customTickerInputEl) {
+  customTickerInputEl.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      addCustomTickerBtnEl?.click();
+    }
+  });
+}
 
 uploadCloudinaryBtn.addEventListener("click", handleUploadClick);
 if (refreshCloudinaryBtn) {
@@ -858,6 +1000,7 @@ async function initAdmin() {
   await ensureAuthenticated();
   renderCloudinaryConfigStatus();
   renderOverlayToggleButton();
+  renderCustomTickerList();
 
   try {
     await loadSettings();
@@ -867,7 +1010,7 @@ async function initAdmin() {
       overlayEnabledState = storedValue;
       renderOverlayToggleButton();
     }
-    showStatus(error.message || "Failed to load overlay settings", true);
+    showStatus(error.message || "Failed to load settings", true);
   }
 
   try {

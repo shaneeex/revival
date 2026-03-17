@@ -12,18 +12,20 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700;800&family=Rajdhani:wght@500;700&family=Teko:wght@600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260316h" />
+  <link rel="stylesheet" href="styles.css?v=20260317r" />
 </head>
 <body>
   <div class="stage">
     <main class="totem-screen">
       <header class="brand-section">
-        <img
-          class="brand-mark"
-          src="logos/revival.png"
-          onerror="this.onerror=null;this.src='logos/revival.jpg';"
-          alt="Revival Sports"
-        />
+        <div class="brand-mark-wrap" aria-hidden="true">
+          <img
+            class="brand-mark"
+            src="logos/revival.png"
+            onerror="this.onerror=null;this.src='logos/revival.jpg';"
+            alt="Revival Sports"
+          />
+        </div>
         <h1 class="brand-title">REVIVAL SPORTS</h1>
         <div id="screen-clock" class="screen-clock" aria-label="Current time">--:--</div>
       </header>
@@ -39,16 +41,22 @@
       <section id="logo-section" aria-label="Quick Links and Partner">
         <div class="contact-strip">
           <article class="qr-item">
-            <img
-              class="qr-code"
-              src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=https%3A%2F%2Fwww.revivalsports.mv"
-              alt="QR code for Revival Sports website"
-              referrerpolicy="no-referrer"
-            />
-            <div class="qr-meta">
-              <div class="qr-label">WEBSITE</div>
-              <div class="qr-value">REVIVALSPORTS.MV</div>
+            <div class="qr-top">
+              <img
+                class="qr-code"
+                src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=https%3A%2F%2Fwww.revivalsports.mv"
+                alt="QR code for Revival Sports website"
+                referrerpolicy="no-referrer"
+              />
+              <div class="qr-icon-wrap">
+                <img
+                  class="social-logo website-logo"
+                  src="logos/icon-web.svg"
+                  alt="Website icon"
+                />
+              </div>
             </div>
+            <div class="qr-value">REVIVALSPORTS.MV</div>
           </article>
 
           <div class="contact-center-brand">
@@ -61,22 +69,31 @@
           </div>
 
           <article class="qr-item qr-item-right">
-            <div class="qr-meta">
-              <div class="qr-label">INSTAGRAM</div>
-              <div class="qr-value">@REVIVALSPORTS</div>
+            <div class="qr-top">
+              <div class="qr-icon-wrap">
+                <img
+                  class="social-logo instagram-logo"
+                  src="logos/icon-instagram.svg"
+                  alt="Instagram logo"
+                />
+              </div>
+              <img
+                class="qr-code"
+                src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=https%3A%2F%2Fwww.instagram.com%2Frevivalsports"
+                alt="QR code for Revival Sports Instagram"
+                referrerpolicy="no-referrer"
+              />
             </div>
-            <img
-              class="qr-code"
-              src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=https%3A%2F%2Fwww.instagram.com%2Frevivalsports"
-              alt="QR code for Revival Sports Instagram"
-              referrerpolicy="no-referrer"
-            />
+            <div class="qr-value">@REVIVALSPORTS</div>
           </article>
         </div>
       </section>
 
       <section id="marquee-section" aria-label="Ticker Updates">
-        <div id="marquee-label" class="marquee-label">LATEST NEWS</div>
+        <div id="marquee-label" class="marquee-label">
+          <span class="marquee-label-top">LATEST</span>
+          <span class="marquee-label-bottom">NEWS</span>
+        </div>
         <div class="marquee-window">
           <div id="marquee-track" class="marquee-track">
             <span class="marquee-text">Loading updates...</span>
@@ -115,6 +132,6 @@
       <div class="noscript-inner">Enable JavaScript to run the signage screen.</div>
     </div>
   </noscript>
-  <script src="script.js?v=20260316d"></script>
+  <script src="script.js?v=20260317e"></script>
 </body>
 </html>

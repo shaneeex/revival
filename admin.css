@@ -226,6 +226,39 @@ button.secondary,
   gap: 10px;
 }
 
+.ticker-add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  margin-top: 8px;
+  margin-bottom: 10px;
+}
+
+.ticker-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ticker-item {
+  border: 1px solid rgba(98, 128, 174, 0.31);
+  border-radius: 10px;
+  background: rgba(11, 18, 32, 0.86);
+  padding: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.ticker-item input[type="text"] {
+  width: 100%;
+}
+
+.ticker-item button {
+  padding: 8px 11px;
+}
+
 .media-guide {
   margin-top: 4px;
   border: 1px solid rgba(100, 132, 180, 0.32);
@@ -373,5 +406,13 @@ button.secondary,
 
   #logout-btn {
     padding-inline: 11px;
+  }
+
+  .ticker-add-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ticker-item {
+    grid-template-columns: 1fr;
   }
 }

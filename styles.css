@@ -152,9 +152,45 @@ body {
   z-index: 3;
 }
 
+.brand-mark-wrap {
+  position: relative;
+  --brand-logo-size: clamp(2.5rem, 5.6vh, 4.9rem);
+  width: var(--brand-logo-size);
+  height: var(--brand-logo-size);
+  display: grid;
+  place-items: center;
+}
+
+.brand-mark-wrap::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.78) 45%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-repeat: no-repeat;
+  background-size: 38% 100%;
+  background-position: -180% 0;
+  -webkit-mask-image: url("logos/revival.png");
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+  mask-image: url("logos/revival.png");
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  opacity: 0;
+  animation: centerLogoShine 9.8s ease-in-out infinite;
+  z-index: 2;
+}
+
 .brand-mark {
-  height: clamp(2.5rem, 5.6vh, 4.9rem);
-  width: auto;
+  height: var(--brand-logo-size);
+  width: var(--brand-logo-size);
   object-fit: contain;
   background: transparent !important;
   border: 0;
@@ -331,30 +367,89 @@ body {
   position: relative;
   display: grid;
   grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 0.8vh;
-  padding: 0.35vh 3.9vh 0.35vh 0.7vh;
-  border-top: 0.2vh solid rgba(255, 59, 90, 0.75);
-  background: linear-gradient(180deg, #7f0f23 0%, #550916 100%);
+  align-items: stretch;
+  gap: 0.16vh;
+  padding: 0.22vh 0.38vh;
+  border-top: 0.14vh solid rgba(255, 86, 117, 0.74);
+  border-bottom: 0.14vh solid rgba(0, 0, 0, 0.44);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 34%),
+    linear-gradient(180deg, #192236 0%, #111828 100%);
   overflow: hidden;
 }
 
 .marquee-label {
-  white-space: nowrap;
-  padding: 0.18em 0.62em;
-  border: 0.08vh solid rgba(255, 255, 255, 0.25);
-  background: rgba(6, 9, 13, 0.45);
+  position: relative;
+  z-index: 2;
+  align-self: stretch;
+  width: clamp(4.95rem, 9.7vh, 6.1rem);
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  padding: 0.12vh 0.52vh 0.12vh 0.44vh;
+  border: 0.1vh solid rgba(255, 255, 255, 0.2);
+  background: linear-gradient(180deg, #ca293d 0%, #8e172a 100%);
+  clip-path: polygon(0 0, 96% 0, 100% 50%, 96% 100%, 0 100%);
+  box-shadow:
+    inset 0 0.1vh 0 rgba(255, 255, 255, 0.24),
+    0 0.2vh 0.5vh rgba(0, 0, 0, 0.35);
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.marquee-label-top {
   font-family: "Barlow Condensed", sans-serif;
   font-weight: 700;
-  font-size: clamp(0.8rem, 1.9vh, 1.3rem);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: #fff;
+  font-size: clamp(0.62rem, 1.28vh, 0.92rem);
+  letter-spacing: 0.06em;
+  color: #fff8ec;
+  transform: translateY(0.03vh);
+}
+
+.marquee-label-bottom {
+  font-family: "Barlow Condensed", sans-serif;
+  font-weight: 800;
+  font-size: clamp(1rem, 2.18vh, 1.58rem);
+  letter-spacing: 0.038em;
+  color: #ffffff;
+  text-shadow: 0 0.1vh 0.2vh rgba(0, 0, 0, 0.34);
 }
 
 .marquee-window {
+  position: relative;
+  grid-column: 2 / 3;
+  display: grid;
+  align-items: center;
   overflow: hidden;
   min-width: 0;
+  border: 0.1vh solid rgba(255, 116, 143, 0.32);
+  background: linear-gradient(180deg, #24344f 0%, #162238 100%);
+  box-shadow:
+    inset 0 0.12vh 0 rgba(255, 255, 255, 0.16),
+    inset 0 -0.12vh 0 rgba(0, 0, 0, 0.2);
+  padding: 0.1vh 2.9vh 0.1vh 0.52vh;
+}
+
+.marquee-window::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(16, 22, 35, 0.45), transparent 7%, transparent 76%, rgba(15, 20, 33, 0.95) 91%, rgba(15, 20, 33, 1) 100%);
+  z-index: 3;
+}
+
+.marquee-window::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: clamp(2.05rem, 3.6vh, 2.85rem);
+  pointer-events: none;
+  background: linear-gradient(270deg, rgba(205, 34, 64, 0.72), rgba(205, 34, 64, 0.2) 58%, transparent 86%);
+  z-index: 4;
 }
 
 .marquee-track {
@@ -370,10 +465,11 @@ body {
   display: inline-block;
   white-space: nowrap;
   font-family: "Barlow Condensed", sans-serif;
-  font-size: clamp(0.85rem, 2vh, 1.45rem);
+  font-size: clamp(0.95rem, 2.15vh, 1.44rem);
   font-weight: 700;
-  letter-spacing: 0.02em;
-  color: #f4f8ff;
+  letter-spacing: 0.016em;
+  color: #f6f9ff;
+  text-shadow: 0 0.08vh 0.18vh rgba(0, 0, 0, 0.42);
 }
 
 .contact-strip {
@@ -388,25 +484,51 @@ body {
 
 .qr-item {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 0.58vh;
+  grid-template-rows: auto auto;
+  align-content: center;
+  justify-items: start;
+  row-gap: 0.36vh;
   min-height: 0;
-  justify-self: start;
+  width: 100%;
+  justify-self: stretch;
 }
 
 .qr-item-right {
-  grid-template-columns: minmax(0, 1fr) auto;
-  justify-self: end;
+  justify-items: end;
 }
 
-.qr-item-right .qr-meta {
+.qr-item-right .qr-value {
   text-align: right;
 }
 
+.qr-top {
+  display: flex;
+  align-items: center;
+  gap: 0.85vh;
+}
+
+.qr-item-right .qr-top {
+  justify-content: flex-end;
+}
+
+.qr-icon-wrap {
+  display: grid;
+  place-items: center;
+  width: clamp(2.05rem, 3.9vh, 3rem);
+  height: clamp(2.05rem, 3.9vh, 3rem);
+}
+
+.social-logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 0.08vh 0.2vh rgba(0, 0, 0, 0.45));
+}
+
 .qr-code {
-  width: clamp(3.6rem, 6.8vh, 6.5rem);
-  height: clamp(3.6rem, 6.8vh, 6.5rem);
+  width: clamp(4.1rem, 7.9vh, 7.35rem);
+  height: clamp(4.1rem, 7.9vh, 7.35rem);
   border-radius: 0.22vh;
   border: 0;
   background: #fff;
@@ -415,60 +537,101 @@ body {
   box-shadow: 0 0.16vh 0.6vh rgba(0, 0, 0, 0.45);
 }
 
-.qr-meta {
-  display: grid;
-  row-gap: 0.24vh;
-  min-width: 0;
-}
-
-.qr-label {
-  font-family: "Barlow Condensed", sans-serif;
-  font-size: clamp(0.66rem, 1.34vh, 1rem);
-  font-weight: 700;
-  letter-spacing: 0.11em;
-  color: #ffe8ad;
-  text-transform: uppercase;
-  line-height: 1;
+.website-logo,
+.instagram-logo {
+  transform: translateZ(0);
 }
 
 .qr-value {
   font-family: "Barlow Condensed", sans-serif;
-  font-size: clamp(0.78rem, 1.62vh, 1.22rem);
+  font-size: clamp(0.82rem, 1.72vh, 1.3rem);
   font-weight: 700;
   letter-spacing: 0.045em;
   color: #f8fbff;
   line-height: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .contact-center-brand {
+  position: relative;
+  --center-logo-size: clamp(4.7rem, 8.85vh, 8.25rem);
   display: grid;
   justify-items: center;
   align-content: center;
   gap: 0;
-  min-width: clamp(4rem, 7.2vh, 6.8rem);
+  min-width: clamp(4.9rem, 9.1vh, 8rem);
   justify-self: center;
 }
 
+.contact-center-brand::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--center-logo-size);
+  height: var(--center-logo-size);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.8) 45%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-repeat: no-repeat;
+  background-size: 42% 100%;
+  background-position: -180% 0;
+  -webkit-mask-image: url("logos/revival.png");
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+  mask-image: url("logos/revival.png");
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  opacity: 0;
+  animation: centerLogoShine 9.8s ease-in-out infinite;
+  z-index: 3;
+}
+
 .contact-revival-logo {
-  width: clamp(3.4rem, 6.4vh, 6rem);
-  height: clamp(3.4rem, 6.4vh, 6rem);
+  width: var(--center-logo-size);
+  height: var(--center-logo-size);
   object-fit: contain;
   filter: drop-shadow(0 0.2vh 0.5vh rgba(0, 0, 0, 0.45));
 }
 
 .mib-marquee-logo {
   position: absolute;
-  right: 0.72vh;
-  bottom: 0.28vh;
-  width: clamp(1.55rem, 2.9vh, 2.6rem);
-  height: clamp(1.55rem, 2.9vh, 2.6rem);
+  right: 0.46vh;
+  top: 50%;
+  transform: translateY(-50%);
+  height: calc(100% - 0.5vh);
+  aspect-ratio: 1 / 1;
+  width: auto;
   object-fit: contain;
-  opacity: 0.95;
-  filter: drop-shadow(0 0.12vh 0.32vh rgba(0, 0, 0, 0.5));
-  z-index: 6;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  opacity: 1;
+  filter: drop-shadow(0 0.08vh 0.24vh rgba(0, 0, 0, 0.5));
+  z-index: 7;
   pointer-events: none;
 }
 
@@ -930,6 +1093,28 @@ body {
 
   50% {
     filter: drop-shadow(0 0.2vh 0.75vh rgba(215, 25, 58, 0.45));
+  }
+}
+
+@keyframes centerLogoShine {
+  0%,
+  66%,
+  100% {
+    opacity: 0;
+    background-position: -180% 0;
+  }
+
+  71% {
+    opacity: 0.55;
+  }
+
+  80% {
+    opacity: 0.38;
+    background-position: 240% 0;
+  }
+
+  84% {
+    opacity: 0;
   }
 }
 
