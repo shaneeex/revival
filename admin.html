@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="admin.css?v=20260317b" />
+  <link rel="stylesheet" href="admin.css?v=20260318a" />
 </head>
 <body>
   <main class="admin-shell">
@@ -20,10 +20,23 @@
       <div id="persistence-warning" class="warning-banner hidden" role="status" aria-live="polite"></div>
     </header>
 
-    <section class="card">
-      <h2>Overlay Control</h2>
-      <div class="row">
-        <button id="overlay-toggle-btn" type="button" class="toggle-button">Overlay: ON</button>
+    <section class="card control-card">
+      <h2>Display Controls</h2>
+      <div class="control-stack">
+        <div class="toggle-row">
+          <div class="toggle-copy">
+            <h3>Time Up Overlay</h3>
+            <p>Show or hide timed court-change overlay.</p>
+          </div>
+          <button id="overlay-toggle-btn" type="button" class="toggle-button">Overlay: ON</button>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-copy">
+            <h3>News In Slideshow</h3>
+            <p>Enable or disable news slides inside the main slideshow.</p>
+          </div>
+          <button id="news-toggle-btn" type="button" class="toggle-button">News Slides: ON</button>
+        </div>
       </div>
     </section>
 
@@ -52,6 +65,15 @@
         <label for="upload-image-title">Heading (optional for images)</label>
         <input id="upload-image-title" type="text" maxlength="120" placeholder="Enter heading" />
         <button id="upload-cloudinary-btn" type="button">Upload</button>
+        <div id="upload-progress-wrap" class="upload-progress hidden" role="status" aria-live="polite">
+          <div class="upload-progress-head">
+            <span id="upload-progress-label">Preparing upload...</span>
+            <span id="upload-progress-value">0%</span>
+          </div>
+          <div class="upload-progress-track">
+            <div id="upload-progress-bar" class="upload-progress-bar"></div>
+          </div>
+        </div>
         <div class="media-guide">
           <h3>Recommended Media Specs</h3>
           <p>Images: 1020×1260 (4:5 portrait), JPG/PNG/WebP, under 3 MB.</p>
@@ -63,8 +85,13 @@
     </section>
 
     <div id="status" class="status" role="status" aria-live="polite"></div>
+    <div id="upload-complete-popup" class="upload-popup hidden" role="alert" aria-live="assertive">
+      <div class="upload-popup-title">Upload Complete</div>
+      <div id="upload-complete-text" class="upload-popup-text"></div>
+      <button id="upload-complete-close" type="button" class="secondary">Close</button>
+    </div>
   </main>
 
-  <script src="admin.js?v=20260317c"></script>
+  <script src="admin.js?v=20260318a"></script>
 </body>
 </html>

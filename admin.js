@@ -5,6 +5,7 @@ const LOGOUT_API_URL = "/api/logout";
 const SIGNATURE_API_URL = "/api/cloudinary-signature";
 const RUNTIME_CONFIG_URL = "runtime-config.json";
 const OVERLAY_STATE_STORAGE_KEY = "revivalOverlayEnabled";
+const NEWS_SLIDES_STATE_STORAGE_KEY = "revivalNewsSlidesEnabled";
 const FETCH_TIMEOUT_MS = 15000;
 const UPLOAD_TIMEOUT_MS = 15 * 60 * 1000;
 const DEFAULT_IMAGE_MS = 10000;
@@ -15,6 +16,7 @@ const MAX_CUSTOM_TICKER_ITEM_LENGTH = 160;
 
 const statusEl = document.getElementById("status");
 const overlayToggleBtnEl = document.getElementById("overlay-toggle-btn");
+const newsToggleBtnEl = document.getElementById("news-toggle-btn");
 const customTickerInputEl = document.getElementById("custom-ticker-input");
 const addCustomTickerBtnEl = document.getElementById("add-custom-ticker-btn");
 const customTickerEmptyEl = document.getElementById("custom-ticker-empty");
@@ -28,13 +30,22 @@ const refreshCloudinaryBtn = document.getElementById("refresh-cloudinary-btn");
 const cloudinaryListEl = document.getElementById("cloudinary-list");
 const cloudinaryEmptyEl = document.getElementById("cloudinary-empty");
 const persistenceWarningEl = document.getElementById("persistence-warning");
+const uploadProgressWrapEl = document.getElementById("upload-progress-wrap");
+const uploadProgressLabelEl = document.getElementById("upload-progress-label");
+const uploadProgressValueEl = document.getElementById("upload-progress-value");
+const uploadProgressBarEl = document.getElementById("upload-progress-bar");
+const uploadCompletePopupEl = document.getElementById("upload-complete-popup");
+const uploadCompleteTextEl = document.getElementById("upload-complete-text");
+const uploadCompleteCloseEl = document.getElementById("upload-complete-close");
 
 let apiBaseUrl = "";
 let playlist = [];
 let overlayEnabledState = true;
+let newsSlidesEnabledState = true;
 let customTickerItems = [];
 let playlistPersistence = { persistent: true, writable: true, storage: "unknown" };
 let settingsPersistence = { persistent: true, writable: true, storage: "unknown" };
+let uploadPopupTimerId = null;
 let cloudinaryConfig = {
   enabled: false,
   cloudName: "",
@@ -64,7 +75,7 @@ function renderPersistenceWarning() {
   }
 
   if (settingsPersistence.persistent === false) {
-    messages.push("Overlay and bottom bar custom text are temporary and can reset after deployment.");
+    messages.push("Overlay, slideshow news toggle, and bottom bar custom text are temporary and can reset after deployment.");
   }
 
   if (!messages.length) {
@@ -255,29 +266,87 @@ function normalizeCustomTickerItems(value) {
   return normalized;
 }
 
-function readOverlayStateFromStorage() {
+function readBooleanFromStorage(key) {
   try {
-    return parseBooleanValue(window.localStorage.getItem(OVERLAY_STATE_STORAGE_KEY));
+    return parseBooleanValue(window.localStorage.getItem(key));
   } catch {
     return null;
   }
 }
 
-function writeOverlayStateToStorage(value) {
+function writeBooleanToStorage(key, value) {
   try {
-    window.localStorage.setItem(OVERLAY_STATE_STORAGE_KEY, value ? "true" : "false");
+    window.localStorage.setItem(key, value ? "true" : "false");
   } catch {
     // Ignore storage failures.
   }
 }
 
-function renderOverlayToggleButton() {
-  if (!overlayToggleBtnEl) {
+function renderToggleButtonState(buttonEl, enabled, onText, offText) {
+  if (!buttonEl) {
     return;
   }
-  overlayToggleBtnEl.textContent = overlayEnabledState ? "Overlay: ON" : "Overlay: OFF";
-  overlayToggleBtnEl.classList.toggle("is-on", overlayEnabledState);
-  overlayToggleBtnEl.classList.toggle("is-off", !overlayEnabledState);
+  buttonEl.textContent = enabled ? onText : offText;
+  buttonEl.classList.toggle("is-on", enabled);
+  buttonEl.classList.toggle("is-off", !enabled);
+}
+
+function renderOverlayToggleButton() {
+  renderToggleButtonState(overlayToggleBtnEl, overlayEnabledState, "Overlay: ON", "Overlay: OFF");
+}
+
+function renderNewsToggleButton() {
+  renderToggleButtonState(newsToggleBtnEl, newsSlidesEnabledState, "News Slides: ON", "News Slides: OFF");
+}
+
+function setUploadProgress(current, total, labelText = "") {
+  if (!uploadProgressWrapEl || !uploadProgressBarEl || !uploadProgressValueEl || !uploadProgressLabelEl) {
+    return;
+  }
+
+  const safeTotal = Math.max(1, Number(total) || 1);
+  const safeCurrent = Math.max(0, Math.min(safeTotal, Number(current) || 0));
+  const percent = Math.round((safeCurrent / safeTotal) * 100);
+
+  uploadProgressWrapEl.classList.remove("hidden");
+  uploadProgressBarEl.style.width = `${percent}%`;
+  uploadProgressValueEl.textContent = `${percent}%`;
+  uploadProgressLabelEl.textContent = labelText || `Uploading ${safeCurrent}/${safeTotal}`;
+}
+
+function resetUploadProgress() {
+  if (!uploadProgressWrapEl || !uploadProgressBarEl || !uploadProgressValueEl || !uploadProgressLabelEl) {
+    return;
+  }
+
+  uploadProgressWrapEl.classList.add("hidden");
+  uploadProgressBarEl.style.width = "0%";
+  uploadProgressValueEl.textContent = "0%";
+  uploadProgressLabelEl.textContent = "Preparing upload...";
+}
+
+function showUploadCompletePopup(text) {
+  if (!uploadCompletePopupEl || !uploadCompleteTextEl) {
+    return;
+  }
+  if (uploadPopupTimerId) {
+    clearTimeout(uploadPopupTimerId);
+    uploadPopupTimerId = null;
+  }
+  uploadCompleteTextEl.textContent = text || "Upload completed.";
+  uploadCompletePopupEl.classList.remove("hidden");
+  uploadPopupTimerId = setTimeout(hideUploadCompletePopup, 6000);
+}
+
+function hideUploadCompletePopup() {
+  if (!uploadCompletePopupEl) {
+    return;
+  }
+  if (uploadPopupTimerId) {
+    clearTimeout(uploadPopupTimerId);
+    uploadPopupTimerId = null;
+  }
+  uploadCompletePopupEl.classList.add("hidden");
 }
 
 async function persistCustomTickerItems(successMessage) {
@@ -444,23 +513,35 @@ async function ensureAuthenticated() {
 
 async function loadSettings() {
   const payload = await requestJson(buildNoCacheApiUrl(SETTINGS_API_URL), { cache: "no-store" });
-  const apiValue = payload.overlayEnabled !== false;
-  const storedValue = readOverlayStateFromStorage();
+  const apiOverlayValue = payload.overlayEnabled !== false;
+  const apiNewsSlidesValue = payload.newsSlidesEnabled !== false;
+  const storedOverlayValue = readBooleanFromStorage(OVERLAY_STATE_STORAGE_KEY);
+  const storedNewsSlidesValue = readBooleanFromStorage(NEWS_SLIDES_STATE_STORAGE_KEY);
   settingsPersistence = {
     persistent: payload.persistent !== false,
     writable: payload.writable !== false,
     storage: String(payload.storage || "")
   };
-  overlayEnabledState = payload.persistent === false && storedValue !== null ? storedValue : apiValue;
+  overlayEnabledState = payload.persistent === false && storedOverlayValue !== null
+    ? storedOverlayValue
+    : apiOverlayValue;
+  newsSlidesEnabledState = payload.persistent === false && storedNewsSlidesValue !== null
+    ? storedNewsSlidesValue
+    : apiNewsSlidesValue;
   customTickerItems = normalizeCustomTickerItems(payload?.customTickerItems || []);
   renderOverlayToggleButton();
+  renderNewsToggleButton();
   renderCustomTickerList();
-  writeOverlayStateToStorage(overlayEnabledState);
+  writeBooleanToStorage(OVERLAY_STATE_STORAGE_KEY, overlayEnabledState);
+  writeBooleanToStorage(NEWS_SLIDES_STATE_STORAGE_KEY, newsSlidesEnabledState);
   renderPersistenceWarning();
 
   // If server state reset but browser remembers user's last selection, push it back.
-  if (overlayEnabledState !== apiValue) {
-    await saveSettingsPatch({ overlayEnabled: overlayEnabledState }, false);
+  if (overlayEnabledState !== apiOverlayValue || newsSlidesEnabledState !== apiNewsSlidesValue) {
+    await saveSettingsPatch({
+      overlayEnabled: overlayEnabledState,
+      newsSlidesEnabled: newsSlidesEnabledState
+    }, false);
   }
 }
 
@@ -472,10 +553,13 @@ async function saveSettingsPatch(patch, successMessage = "") {
   });
 
   overlayEnabledState = payload.overlayEnabled !== false;
+  newsSlidesEnabledState = payload.newsSlidesEnabled !== false;
   customTickerItems = normalizeCustomTickerItems(payload?.customTickerItems || customTickerItems);
   renderOverlayToggleButton();
+  renderNewsToggleButton();
   renderCustomTickerList();
-  writeOverlayStateToStorage(overlayEnabledState);
+  writeBooleanToStorage(OVERLAY_STATE_STORAGE_KEY, overlayEnabledState);
+  writeBooleanToStorage(NEWS_SLIDES_STATE_STORAGE_KEY, newsSlidesEnabledState);
 
   settingsPersistence = {
     persistent: payload.persistent !== false,
@@ -862,6 +946,8 @@ async function handleUploadClick() {
   }
 
   const imageTitle = String(uploadImageTitleEl?.value || "").trim().slice(0, 120);
+  hideUploadCompletePopup();
+  setUploadProgress(0, files.length, `Preparing upload (0/${files.length})`);
 
   uploadCloudinaryBtn.disabled = true;
   if (refreshCloudinaryBtn) {
@@ -872,8 +958,10 @@ async function handleUploadClick() {
     let uploaded = 0;
     const failed = [];
     let saveFailedCount = 0;
-    for (const file of files) {
-      showStatus(`Uploading ${uploaded + 1}/${files.length}: ${file.name}`);
+    for (let i = 0; i < files.length; i += 1) {
+      const file = files[i];
+      setUploadProgress(i, files.length, `Uploading ${i + 1}/${files.length}: ${file.name}`);
+      showStatus(`Uploading ${i + 1}/${files.length}: ${file.name}`);
       try {
         const uploadedItem = await uploadSingleFile(file, imageTitle);
         if (uploadedItem) {
@@ -895,6 +983,8 @@ async function handleUploadClick() {
           continue;
         }
         failed.push(`${file.name}: ${error.message || "upload failed"}`);
+      } finally {
+        setUploadProgress(i + 1, files.length, `Processed ${i + 1}/${files.length}`);
       }
     }
 
@@ -910,12 +1000,15 @@ async function handleUploadClick() {
       const failedMsg = failed.slice(0, 2).join(" | ");
       const saveMsg = saveFailedCount > 0 ? ` Playlist save unavailable for ${saveFailedCount} item(s); using fallback list.` : "";
       showStatus(`Uploaded ${uploaded}/${files.length}. ${failedMsg}${suffix}${saveMsg}`.trim(), true);
+      showUploadCompletePopup(`Uploaded ${uploaded}/${files.length}. Some files need attention.`);
     } else {
       showStatus(`Uploaded ${uploaded} file(s) and added to content list.`);
+      showUploadCompletePopup(`Uploaded ${uploaded} file(s) successfully.`);
     }
   } catch (error) {
     showStatus(error.message || "Upload failed", true);
   } finally {
+    setTimeout(resetUploadProgress, 700);
     uploadCloudinaryBtn.disabled = false;
     if (refreshCloudinaryBtn) {
       refreshCloudinaryBtn.disabled = false;
@@ -940,6 +1033,30 @@ overlayToggleBtnEl.addEventListener("click", async () => {
     overlayToggleBtnEl.disabled = false;
   }
 });
+
+if (newsToggleBtnEl) {
+  newsToggleBtnEl.addEventListener("click", async () => {
+    const nextValue = !newsSlidesEnabledState;
+    newsToggleBtnEl.disabled = true;
+    try {
+      await saveSettingsPatch({ newsSlidesEnabled: nextValue }, "News slideshow setting updated.");
+    } catch (error) {
+      if ((error.message || "").includes("Unauthorized")) {
+        window.location.replace("/admin-login.html");
+        return;
+      }
+      showStatus(error.message || "Save settings failed", true);
+      newsSlidesEnabledState = !nextValue;
+      renderNewsToggleButton();
+    } finally {
+      newsToggleBtnEl.disabled = false;
+    }
+  });
+}
+
+if (uploadCompleteCloseEl) {
+  uploadCompleteCloseEl.addEventListener("click", hideUploadCompletePopup);
+}
 
 if (addCustomTickerBtnEl) {
   addCustomTickerBtnEl.addEventListener("click", async () => {
@@ -1000,15 +1117,23 @@ async function initAdmin() {
   await ensureAuthenticated();
   renderCloudinaryConfigStatus();
   renderOverlayToggleButton();
+  renderNewsToggleButton();
   renderCustomTickerList();
+  resetUploadProgress();
+  hideUploadCompletePopup();
 
   try {
     await loadSettings();
   } catch (error) {
-    const storedValue = readOverlayStateFromStorage();
-    if (storedValue !== null) {
-      overlayEnabledState = storedValue;
+    const storedOverlayValue = readBooleanFromStorage(OVERLAY_STATE_STORAGE_KEY);
+    const storedNewsSlidesValue = readBooleanFromStorage(NEWS_SLIDES_STATE_STORAGE_KEY);
+    if (storedOverlayValue !== null) {
+      overlayEnabledState = storedOverlayValue;
       renderOverlayToggleButton();
+    }
+    if (storedNewsSlidesValue !== null) {
+      newsSlidesEnabledState = storedNewsSlidesValue;
+      renderNewsToggleButton();
     }
     showStatus(error.message || "Failed to load settings", true);
   }

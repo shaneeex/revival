@@ -69,6 +69,7 @@ let alertCountdownIntervalId = null;
 let alertEndAtMs = 0;
 let alertBeepTick = 0;
 let overlayEnabled = true;
+let newsSlidesEnabled = true;
 let overlayListenersBound = false;
 let apiBaseUrl = "";
 const preloadedImageUrls = new Set();
@@ -426,6 +427,16 @@ function applyOverlayEnabled(value) {
   scheduleAlignedOverlay();
 }
 
+function applyNewsSlidesEnabled(value) {
+  const next = value !== false;
+  if (newsSlidesEnabled === next) {
+    return;
+  }
+
+  newsSlidesEnabled = next;
+  scheduleNextSlide(300);
+}
+
 async function refreshRuntimeSettings() {
   try {
     const response = await fetchWithTimeout(buildNoCacheApiUrl(SETTINGS_API_URL), { cache: "no-store" });
@@ -441,6 +452,9 @@ async function refreshRuntimeSettings() {
     const payload = await response.json();
     if (payload && Object.prototype.hasOwnProperty.call(payload, "overlayEnabled")) {
       applyOverlayEnabled(parseOverlayEnabledValue(payload.overlayEnabled));
+    }
+    if (payload && Object.prototype.hasOwnProperty.call(payload, "newsSlidesEnabled")) {
+      applyNewsSlidesEnabled(parseOverlayEnabledValue(payload.newsSlidesEnabled));
     }
     if (payload && Object.prototype.hasOwnProperty.call(payload, "customTickerItems")) {
       const nextCustomItems = normalizeCustomTickerItems(payload.customTickerItems);
@@ -1059,7 +1073,7 @@ function advanceNextNewsSlideTime() {
 }
 
 function shouldShowNewsSlide() {
-  if (!newsItems.length) {
+  if (!newsSlidesEnabled || !newsItems.length) {
     return false;
   }
 
@@ -1200,8 +1214,11 @@ function showNewsSlide() {
 
 function showMediaSlide() {
   if (!mediaFiles.length) {
-    if (newsItems.length) {
+    if (newsSlidesEnabled && newsItems.length) {
       showNewsSlide();
+    } else {
+      mediaContainer.innerHTML = '<div class="panel-message">No uploaded media content.</div>';
+      scheduleNextSlide(3000);
     }
     return;
   }
@@ -1293,8 +1310,9 @@ function showMediaSlide() {
 }
 
 function showNextSlide() {
-  if (!mediaFiles.length && !newsItems.length) {
-    mediaContainer.innerHTML = '<div class="panel-message">Loading news...</div>';
+  if (!mediaFiles.length && (!newsItems.length || !newsSlidesEnabled)) {
+    const message = newsSlidesEnabled ? "Loading news..." : "No uploaded media content.";
+    mediaContainer.innerHTML = `<div class="panel-message">${message}</div>`;
     scheduleNextSlide(3000);
     return;
   }

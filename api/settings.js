@@ -10,6 +10,7 @@ const MAX_TICKER_ITEM_LENGTH = 160;
 
 let inMemorySettings = {
   overlayEnabled: true,
+  newsSlidesEnabled: true,
   customTickerItems: []
 };
 
@@ -68,6 +69,7 @@ function normalizeCustomTickerItems(value) {
 function toNormalizedSettings(value, fallback = inMemorySettings) {
   const next = value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const overlayEnabled = parseBoolean(next.overlayEnabled, parseBoolean(fallback?.overlayEnabled, true));
+  const newsSlidesEnabled = parseBoolean(next.newsSlidesEnabled, parseBoolean(fallback?.newsSlidesEnabled, true));
 
   const fallbackTicker = normalizeCustomTickerItems(fallback?.customTickerItems || []);
   const customTickerItems = Object.prototype.hasOwnProperty.call(next, "customTickerItems")
@@ -76,6 +78,7 @@ function toNormalizedSettings(value, fallback = inMemorySettings) {
 
   return {
     overlayEnabled,
+    newsSlidesEnabled,
     customTickerItems
   };
 }
@@ -123,6 +126,9 @@ async function writeSettings(nextPartial) {
     overlayEnabled: Object.prototype.hasOwnProperty.call(patch, "overlayEnabled")
       ? parseBoolean(patch.overlayEnabled, current.overlayEnabled)
       : current.overlayEnabled,
+    newsSlidesEnabled: Object.prototype.hasOwnProperty.call(patch, "newsSlidesEnabled")
+      ? parseBoolean(patch.newsSlidesEnabled, current.newsSlidesEnabled)
+      : current.newsSlidesEnabled,
     customTickerItems: Object.prototype.hasOwnProperty.call(patch, "customTickerItems")
       ? normalizeCustomTickerItems(patch.customTickerItems)
       : normalizeCustomTickerItems(current.customTickerItems)
@@ -169,6 +175,7 @@ module.exports = async (req, res) => {
     const state = await readSettings();
     res.status(200).json({
       overlayEnabled: state.settings.overlayEnabled,
+      newsSlidesEnabled: state.settings.newsSlidesEnabled,
       customTickerItems: state.settings.customTickerItems,
       persistent: state.persistent,
       writable: state.writable,
@@ -187,6 +194,7 @@ module.exports = async (req, res) => {
     res.status(200).json({
       ok: true,
       overlayEnabled: state.settings.overlayEnabled,
+      newsSlidesEnabled: state.settings.newsSlidesEnabled,
       customTickerItems: state.settings.customTickerItems,
       persistent: state.persistent,
       writable: state.writable,
