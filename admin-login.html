@@ -4,18 +4,30 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Revival Admin Login</title>
-  <link rel="stylesheet" href="admin.css?v=20260314p" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="admin.css?v=20260318b" />
 </head>
 <body>
   <main class="admin-shell">
-    <header class="admin-header">
-      <h1>Revival Signage Admin</h1>
-      <p>Sign in to manage overlay and upload media to Cloudinary.</p>
+    <header class="admin-header card">
+      <div class="admin-header-row">
+        <div class="admin-title-wrap">
+          <img
+            class="admin-top-logo"
+            src="logos/revival.png"
+            onerror="this.onerror=null;this.src='logos/revival.jpg';"
+            alt="Revival Sports"
+          />
+          <h1>Revival Signage Admin</h1>
+        </div>
+      </div>
+      <p>Sign in to manage the signage screen.</p>
     </header>
 
     <section class="card login-card">
       <h2>Admin Login</h2>
-      <p class="muted">Default login: <strong>admin</strong> / <strong>Revival@123</strong></p>
       <form id="login-form" class="upload-form" autocomplete="on">
         <label for="login-username">Username</label>
         <input id="login-username" type="text" autocomplete="username" required />

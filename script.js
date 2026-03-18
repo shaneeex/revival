@@ -1165,7 +1165,7 @@ function showNewsSlide() {
   advanceNextNewsSlideTime();
 
   const newsSlide = document.createElement("article");
-  newsSlide.className = "news-slide";
+  newsSlide.className = "news-slide slide-fade";
 
   const imageBox = document.createElement("div");
   imageBox.className = "news-slide-image-box";
@@ -1256,7 +1256,7 @@ function showMediaSlide() {
 
   if (!headingText) {
     const img = document.createElement("img");
-    img.className = "image-item";
+    img.className = "image-item slide-fade";
     img.src = item.src;
     img.alt = "Signage image";
     img.decoding = "async";
@@ -1269,7 +1269,7 @@ function showMediaSlide() {
   }
 
   const slide = document.createElement("article");
-  slide.className = "news-slide image-media-slide";
+  slide.className = "news-slide image-media-slide slide-fade";
 
   const imageBox = document.createElement("div");
   imageBox.className = "news-slide-image-box";

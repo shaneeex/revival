@@ -23,6 +23,8 @@ body {
 }
 
 body {
+  min-height: 100vh;
+  min-height: 100dvh;
   overflow: hidden;
   color: var(--white);
   font-family: "Rajdhani", sans-serif;
@@ -38,9 +40,10 @@ body {
   position: relative;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   display: grid;
-  place-items: center;
-  padding: 0.8vh 0;
+  place-items: stretch;
+  padding: 0;
   overflow: hidden;
 }
 
@@ -69,8 +72,10 @@ body {
 
 .totem-screen {
   position: relative;
-  width: min(98vw, 56vh);
-  height: 98vh;
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
   overflow: hidden;
   display: grid;
   grid-template-rows: 10% 69% 13% 8%;
@@ -173,7 +178,7 @@ body {
     rgba(255, 255, 255, 0) 100%
   );
   background-repeat: no-repeat;
-  background-size: 38% 100%;
+  background-size: 54% 100%;
   background-position: -180% 0;
   -webkit-mask-image: url("logos/revival.png");
   -webkit-mask-repeat: no-repeat;
@@ -184,7 +189,7 @@ body {
   mask-position: center;
   mask-size: contain;
   opacity: 0;
-  animation: centerLogoShine 9.8s ease-in-out infinite;
+  animation: centerLogoShine 4.6s ease-in-out infinite;
   z-index: 2;
 }
 
@@ -326,6 +331,11 @@ body {
 
 .slide-item {
   animation: mediaCutIn 540ms cubic-bezier(0.14, 0.7, 0.2, 1) both;
+}
+
+.slide-fade {
+  opacity: 0;
+  animation: photoFadeIn 540ms ease-out forwards;
 }
 
 .video-item {
@@ -577,7 +587,7 @@ body {
     rgba(255, 255, 255, 0) 100%
   );
   background-repeat: no-repeat;
-  background-size: 42% 100%;
+  background-size: 56% 100%;
   background-position: -180% 0;
   -webkit-mask-image: url("logos/revival.png");
   -webkit-mask-repeat: no-repeat;
@@ -588,7 +598,7 @@ body {
   mask-position: center;
   mask-size: contain;
   opacity: 0;
-  animation: centerLogoShine 9.8s ease-in-out infinite;
+  animation: centerLogoShine 5.2s ease-in-out infinite;
   z-index: 3;
 }
 
@@ -968,6 +978,16 @@ body {
   }
 }
 
+@keyframes photoFadeIn {
+  0% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
 @keyframes imageDriftLeft {
   0% {
     transform: scale(1.02) translate3d(1.2%, 0.6%, 0);
@@ -1061,22 +1081,22 @@ body {
 
 @keyframes centerLogoShine {
   0%,
-  66%,
+  44%,
   100% {
     opacity: 0;
     background-position: -180% 0;
   }
 
-  71% {
-    opacity: 0.55;
+  50% {
+    opacity: 0.9;
   }
 
-  80% {
-    opacity: 0.38;
+  60% {
+    opacity: 0.72;
     background-position: 240% 0;
   }
 
-  84% {
+  64% {
     opacity: 0;
   }
 }
@@ -1214,14 +1234,15 @@ body {
 
 @media (max-aspect-ratio: 10/16) {
   .totem-screen {
-    width: 100vw;
-    height: 100vh;
+    width: 100%;
+    height: 100%;
     border-width: 0;
   }
 }
 
 @media (min-aspect-ratio: 4/3) {
   .totem-screen {
-    width: min(55vw, 54vh);
+    width: 100%;
+    height: 100%;
   }
 }
