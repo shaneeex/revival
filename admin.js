@@ -366,6 +366,10 @@ function renderCustomTickerList() {
     const row = document.createElement("div");
     row.className = "ticker-item";
 
+    const order = document.createElement("div");
+    order.className = "ticker-order";
+    order.textContent = String(index + 1);
+
     const input = document.createElement("input");
     input.type = "text";
     input.maxLength = MAX_CUSTOM_TICKER_ITEM_LENGTH;
@@ -413,7 +417,7 @@ function renderCustomTickerList() {
       saveBtn.click();
     });
 
-    row.append(input, saveBtn, deleteBtn);
+    row.append(order, input, saveBtn, deleteBtn);
     customTickerListEl.appendChild(row);
   });
 }
@@ -688,6 +692,16 @@ function getVideoThumbnailUrl(item) {
   return `https://res.cloudinary.com/${encodeURIComponent(cloudinaryConfig.cloudName)}/video/upload/so_0,f_jpg,w_640,c_fill/${publicId}.jpg`;
 }
 
+function durationMsToSeconds(durationMs) {
+  const ms = Math.max(1000, Number(durationMs) || cloudinaryConfig.defaultImageDurationMs);
+  return Math.max(1, Math.round(ms / 1000));
+}
+
+function durationSecondsToMs(durationSec) {
+  const sec = Math.max(1, Number(durationSec) || 1);
+  return Math.max(1000, Math.round(sec * 1000));
+}
+
 function renderPlaylist() {
   const isReadOnly = playlistPersistence.writable === false;
   cloudinaryListEl.innerHTML = "";
@@ -703,15 +717,15 @@ function renderPlaylist() {
     const top = document.createElement("div");
     top.className = "item-top";
 
-    const name = document.createElement("div");
-    name.className = "item-name";
-    name.textContent = item.publicId || item.src;
+    const order = document.createElement("div");
+    order.className = "item-order";
+    order.textContent = `Slide ${index + 1}`;
 
     const meta = document.createElement("div");
     meta.className = "item-meta";
-    meta.textContent = `${item.type.toUpperCase()} | Position ${index + 1}`;
+    meta.textContent = item.type.toUpperCase();
 
-    top.append(name, meta);
+    top.append(order, meta);
     card.appendChild(top);
 
     const actions = document.createElement("div");
@@ -759,8 +773,6 @@ function renderPlaylist() {
       }
     });
 
-    actions.append(upBtn, downBtn, removeBtn);
-
     if (item.type === "image") {
       const titleLabel = document.createElement("label");
       titleLabel.textContent = "Heading";
@@ -770,43 +782,84 @@ function renderPlaylist() {
       titleInput.maxLength = 120;
       titleInput.value = String(item.title || "");
       titleInput.placeholder = "Image heading";
-      titleInput.disabled = isReadOnly;
-      titleInput.addEventListener("input", () => {
-        item.title = String(titleInput.value || "").trim().slice(0, 120);
-      });
-      titleInput.addEventListener("change", async () => {
-        try {
-          await savePlaylistWithStatus("Image heading updated.");
-        } catch (error) {
-          showStatus(error.message || "Unable to save content list", true);
-        }
-      });
+      titleInput.disabled = true;
       titleLabel.appendChild(titleInput);
       actions.appendChild(titleLabel);
 
       const durationLabel = document.createElement("label");
-      durationLabel.textContent = "Duration (ms)";
+      durationLabel.textContent = "Duration (sec)";
 
       const durationInput = document.createElement("input");
       durationInput.type = "number";
-      durationInput.min = "1000";
-      durationInput.step = "500";
-      durationInput.value = String(item.duration || cloudinaryConfig.defaultImageDurationMs);
-      durationInput.disabled = isReadOnly;
-      durationInput.addEventListener("input", () => {
-        item.duration = Math.max(1000, Number(durationInput.value) || cloudinaryConfig.defaultImageDurationMs);
+      durationInput.min = "1";
+      durationInput.step = "1";
+      durationInput.value = String(durationMsToSeconds(item.duration));
+      durationInput.disabled = true;
+      durationLabel.appendChild(durationInput);
+      actions.appendChild(durationLabel);
+
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "secondary";
+      editBtn.textContent = "Edit";
+      editBtn.disabled = isReadOnly;
+
+      const saveBtn = document.createElement("button");
+      saveBtn.type = "button";
+      saveBtn.className = "secondary hidden";
+      saveBtn.textContent = "Save";
+      saveBtn.disabled = isReadOnly;
+
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "secondary hidden";
+      cancelBtn.textContent = "Cancel";
+      cancelBtn.disabled = isReadOnly;
+
+      const setEditing = (editing) => {
+        titleInput.disabled = !editing || isReadOnly;
+        durationInput.disabled = !editing || isReadOnly;
+        editBtn.classList.toggle("hidden", editing);
+        saveBtn.classList.toggle("hidden", !editing);
+        cancelBtn.classList.toggle("hidden", !editing);
+      };
+
+      const restoreValues = () => {
+        titleInput.value = String(item.title || "");
+        durationInput.value = String(durationMsToSeconds(item.duration));
+      };
+
+      editBtn.addEventListener("click", () => {
+        setEditing(true);
       });
-      durationInput.addEventListener("change", async () => {
+
+      cancelBtn.addEventListener("click", () => {
+        restoreValues();
+        setEditing(false);
+      });
+
+      saveBtn.addEventListener("click", async () => {
+        const title = String(titleInput.value || "").trim().slice(0, 120);
+        const durationMs = durationSecondsToMs(durationInput.value);
+        if (title) {
+          item.title = title;
+        } else {
+          delete item.title;
+        }
+        item.duration = durationMs;
+
         try {
-          await savePlaylistWithStatus("Image duration updated.");
+          await savePlaylistWithStatus("Slide settings saved.");
+          setEditing(false);
         } catch (error) {
           showStatus(error.message || "Unable to save content list", true);
         }
       });
 
-      durationLabel.appendChild(durationInput);
-      actions.appendChild(durationLabel);
+      actions.append(editBtn, saveBtn, cancelBtn);
     }
+
+    actions.append(upBtn, downBtn, removeBtn);
 
     card.appendChild(actions);
 

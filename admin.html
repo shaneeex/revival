@@ -7,13 +7,21 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="admin.css?v=20260318a" />
+  <link rel="stylesheet" href="admin.css?v=20260318b" />
 </head>
 <body>
   <main class="admin-shell">
     <header class="admin-header card">
       <div class="admin-header-row">
-        <h1>Revival Signage Admin</h1>
+        <div class="admin-title-wrap">
+          <img
+            class="admin-top-logo"
+            src="logos/revival.png"
+            onerror="this.onerror=null;this.src='logos/revival.jpg';"
+            alt="Revival Sports"
+          />
+          <h1>Revival Signage Admin</h1>
+        </div>
         <button id="logout-btn" type="button" class="secondary">Logout</button>
       </div>
       <p>Upload content, manage ticker text, and control overlay behavior.</p>
@@ -92,6 +100,6 @@
     </div>
   </main>
 
-  <script src="admin.js?v=20260318a"></script>
+  <script src="admin.js?v=20260318b"></script>
 </body>
 </html>
