@@ -19,6 +19,8 @@ const NEWS_SLIDE_INTERVAL_MS = 10 * 60 * 1000;
 const NEWS_SLIDE_DURATION_MS = 10 * 1000;
 const TICKER_WEBSITE_BURST_INTERVAL_MS = 15 * 60 * 1000;
 const TICKER_WEBSITE_BURST_DURATION_MS = 15 * 1000;
+const LOGO_SPIN_BURST_INTERVAL_MS = 60 * 1000;
+const LOGO_SPIN_BURST_DURATION_MS = 2 * 1000;
 const ALERT_INTERVAL_MS = 60 * 60 * 1000;
 const ALERT_DURATION_MS = 60 * 1000;
 const ALERT_BEEP_INTERVAL_MS = 850;
@@ -35,6 +37,7 @@ const mediaContainer = document.getElementById("media-container");
 const mediaFrameEl = document.querySelector(".media-frame");
 const clockEl = document.getElementById("screen-clock");
 const marqueeTrackEl = document.getElementById("marquee-track");
+const centerLogoEl = document.querySelector(".contact-revival-logo");
 const timeupOverlayEl = document.getElementById("timeup-overlay");
 const timeupCountdownEl = document.getElementById("timeup-countdown");
 const timeupProgressEl = document.getElementById("timeup-progress-bar");
@@ -59,6 +62,9 @@ let marqueeWebsiteBurstActive = false;
 let marqueeWebsiteBurstTimeoutId = null;
 let marqueeWebsiteBurstIntervalId = null;
 let marqueeWebsiteBurstAlignTimeoutId = null;
+let logoSpinBurstAlignTimeoutId = null;
+let logoSpinBurstIntervalId = null;
+let logoSpinBurstCleanupTimeoutId = null;
 
 let alertHideTimeoutId = null;
 let alertIntervalId = null;
@@ -580,6 +586,58 @@ function scheduleMarqueeWebsiteBursts() {
     marqueeWebsiteBurstIntervalId = setInterval(
       startMarqueeWebsiteBurst,
       TICKER_WEBSITE_BURST_INTERVAL_MS
+    );
+  }, delay);
+}
+
+function clearLogoSpinBurstSchedule() {
+  if (logoSpinBurstAlignTimeoutId) {
+    clearTimeout(logoSpinBurstAlignTimeoutId);
+    logoSpinBurstAlignTimeoutId = null;
+  }
+  if (logoSpinBurstIntervalId) {
+    clearInterval(logoSpinBurstIntervalId);
+    logoSpinBurstIntervalId = null;
+  }
+  if (logoSpinBurstCleanupTimeoutId) {
+    clearTimeout(logoSpinBurstCleanupTimeoutId);
+    logoSpinBurstCleanupTimeoutId = null;
+  }
+  if (centerLogoEl) {
+    centerLogoEl.classList.remove("spin-burst");
+  }
+}
+
+function triggerLogoSpinBurst() {
+  if (!centerLogoEl || document.hidden) {
+    return;
+  }
+
+  centerLogoEl.classList.remove("spin-burst");
+  void centerLogoEl.offsetWidth;
+  centerLogoEl.classList.add("spin-burst");
+
+  if (logoSpinBurstCleanupTimeoutId) {
+    clearTimeout(logoSpinBurstCleanupTimeoutId);
+  }
+  logoSpinBurstCleanupTimeoutId = setTimeout(() => {
+    centerLogoEl.classList.remove("spin-burst");
+  }, LOGO_SPIN_BURST_DURATION_MS);
+}
+
+function scheduleLogoSpinBursts() {
+  clearLogoSpinBurstSchedule();
+
+  if (!centerLogoEl) {
+    return;
+  }
+
+  const delay = getMsUntilNextAlignedInterval(LOGO_SPIN_BURST_INTERVAL_MS);
+  logoSpinBurstAlignTimeoutId = setTimeout(() => {
+    triggerLogoSpinBurst();
+    logoSpinBurstIntervalId = setInterval(
+      triggerLogoSpinBurst,
+      LOGO_SPIN_BURST_INTERVAL_MS
     );
   }, delay);
 }
@@ -1509,6 +1567,7 @@ async function init() {
   await refreshMediaSources();
   ensureNextNewsSlideScheduled();
   scheduleMarqueeWebsiteBursts();
+  scheduleLogoSpinBursts();
   refreshMarqueeFromSources();
   await refreshNews();
   showNextSlide();
@@ -1524,6 +1583,7 @@ async function init() {
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       stopMarqueeLoop();
+      clearLogoSpinBurstSchedule();
       return;
     }
 
@@ -1533,6 +1593,7 @@ async function init() {
     if (!document.hidden) {
       ensureNextNewsSlideScheduled();
       scheduleMarqueeWebsiteBursts();
+      scheduleLogoSpinBursts();
       refreshMarqueeFromSources();
     }
   });
