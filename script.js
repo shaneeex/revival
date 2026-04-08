@@ -36,6 +36,8 @@ const CLOUDINARY_DEFAULT_MAX_ITEMS = 80;
 const CLOUDINARY_LIST_CACHE_MS = 10 * 60 * 1000;
 const CLOUDINARY_IMAGE_DELIVERY_TRANSFORM = "f_auto,q_auto:eco,w_1600,h_1600,c_limit";
 const CLOUDINARY_VIDEO_DELIVERY_TRANSFORM = "f_auto,q_auto:eco,w_1280,h_1280,c_limit";
+const MEDIA_RESPONSE_CACHE_NAME = "revival-signage-media-v1";
+const MEDIA_CACHE_FETCH_TIMEOUT_MS = 90 * 1000;
 
 const mediaContainer = document.getElementById("media-container");
 const mediaFrameEl = document.querySelector(".media-frame");
@@ -52,6 +54,7 @@ let mediaIndex = 0;
 let mediaTimeoutId = null;
 let mediaStateSignature = "";
 let mediaRefreshInFlight = false;
+let mediaRenderToken = 0;
 let cloudinaryPlaylistCache = { items: [], fetchedAt: 0 };
 
 let newsItems = [];
@@ -86,6 +89,8 @@ let apiBaseUrl = "";
 const preloadedImageUrls = new Set();
 const preloadedVideoUrls = new Set();
 const preloadingVideoUrls = new Set();
+const cachedVideoPlaybackUrls = new Map();
+const inFlightVideoPlaybackLoads = new Map();
 let cloudinaryConfig = {
   enabled: false,
   cloudName: "",
@@ -223,6 +228,74 @@ function getOptimizedCloudinarySrc({ src, type, publicId, format, version }) {
     format: assetInfo.format || format,
     version: assetInfo.version || version
   });
+}
+
+function isCloudinaryManagedMediaUrl(src, type = "image") {
+  return Boolean(parseCloudinaryAssetInfo(src, type));
+}
+
+async function openMediaResponseCache() {
+  if (!("caches" in window)) {
+    return null;
+  }
+  try {
+    return await caches.open(MEDIA_RESPONSE_CACHE_NAME);
+  } catch {
+    return null;
+  }
+}
+
+async function getCachedVideoPlaybackSrc(src) {
+  const normalizedSrc = String(src || "").trim();
+  if (!normalizedSrc || !isCloudinaryManagedMediaUrl(normalizedSrc, "video") || !("URL" in window)) {
+    return normalizedSrc;
+  }
+
+  if (cachedVideoPlaybackUrls.has(normalizedSrc)) {
+    return cachedVideoPlaybackUrls.get(normalizedSrc);
+  }
+
+  if (inFlightVideoPlaybackLoads.has(normalizedSrc)) {
+    return inFlightVideoPlaybackLoads.get(normalizedSrc);
+  }
+
+  const loadPromise = (async () => {
+    const cache = await openMediaResponseCache();
+    if (!cache) {
+      return normalizedSrc;
+    }
+
+    let response = await cache.match(normalizedSrc);
+    if (!response) {
+      const networkResponse = await fetchWithTimeoutMs(
+        normalizedSrc,
+        { cache: "force-cache" },
+        MEDIA_CACHE_FETCH_TIMEOUT_MS
+      );
+      if (!networkResponse.ok) {
+        return normalizedSrc;
+      }
+      response = networkResponse.clone();
+      await cache.put(normalizedSrc, networkResponse.clone()).catch(() => {});
+    }
+
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    cachedVideoPlaybackUrls.set(normalizedSrc, objectUrl);
+    return objectUrl;
+  })().finally(() => {
+    inFlightVideoPlaybackLoads.delete(normalizedSrc);
+  });
+
+  inFlightVideoPlaybackLoads.set(normalizedSrc, loadPromise);
+  return loadPromise;
+}
+
+function releaseCachedVideoPlaybackUrls() {
+  for (const url of cachedVideoPlaybackUrls.values()) {
+    URL.revokeObjectURL(url);
+  }
+  cachedVideoPlaybackUrls.clear();
 }
 
 function buildApiUrl(pathname) {
@@ -1410,7 +1483,7 @@ function showNewsSlide() {
   scheduleNextSlide(NEWS_SLIDE_DURATION_MS);
 }
 
-function showMediaSlide() {
+async function showMediaSlide() {
   if (!mediaFiles.length) {
     if (newsSlidesEnabled && newsItems.length) {
       showNewsSlide();
@@ -1421,17 +1494,23 @@ function showMediaSlide() {
     return;
   }
 
+  const renderToken = ++mediaRenderToken;
   triggerSlideTransition();
 
   const item = mediaFiles[mediaIndex];
   mediaIndex = (mediaIndex + 1) % mediaFiles.length;
 
-  mediaContainer.innerHTML = "";
-
   if (item.type === "video") {
+    const playbackSrc = await getCachedVideoPlaybackSrc(item.src);
+    if (renderToken !== mediaRenderToken) {
+      return;
+    }
+
+    mediaContainer.innerHTML = "";
+
     const video = document.createElement("video");
     video.className = "slide-item video-item";
-    video.src = item.src;
+    video.src = playbackSrc;
     video.autoplay = true;
     video.muted = true;
     video.playsInline = true;
@@ -1448,6 +1527,12 @@ function showMediaSlide() {
     scheduleNextSlide(maxDuration);
     return;
   }
+
+  if (renderToken !== mediaRenderToken) {
+    return;
+  }
+
+  mediaContainer.innerHTML = "";
 
   const imageDurationMs = item.duration || DEFAULT_IMAGE_MS;
   const headingText = getImageSlideTitle(item);
@@ -1520,7 +1605,10 @@ function showNextSlide() {
     return;
   }
 
-  showMediaSlide();
+  void showMediaSlide().catch((error) => {
+    console.warn("Media slide render failed:", error);
+    scheduleNextSlide(2000);
+  });
 }
 
 async function fetchNewsFromWpApi() {
@@ -1651,14 +1739,18 @@ function parseRssItems(xmlText) {
     .slice(0, 10);
 }
 
-async function fetchWithTimeout(url, options) {
+async function fetchWithTimeoutMs(url, options, timeoutMs) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs) || FETCH_TIMEOUT_MS));
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+async function fetchWithTimeout(url, options) {
+  return fetchWithTimeoutMs(url, options, FETCH_TIMEOUT_MS);
 }
 
 async function refreshNews() {
@@ -1737,6 +1829,7 @@ async function init() {
       refreshMarqueeFromSources();
     }
   });
+  window.addEventListener("pagehide", releaseCachedVideoPlaybackUrls);
   setupTimeupOverlay();
   setInterval(updateClock, 1000);
   setInterval(refreshRuntimeSettings, SETTINGS_REFRESH_MS);
