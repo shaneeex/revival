@@ -4,7 +4,7 @@ const RUNTIME_CONFIG_URL = "runtime-config.json";
 const DEFAULT_IMAGE_MS = 10000;
 const DEFAULT_VIDEO_MAX_MS = 90000;
 const NEWS_REFRESH_MS = 5 * 60 * 1000;
-const PLAYLIST_REFRESH_MS = 10 * 1000;
+const PLAYLIST_REFRESH_MS = 60 * 1000;
 const FETCH_TIMEOUT_MS = 12000;
 const NEWS_TITLE_MIN_FONT_PX = 16;
 const NEWS_TITLE_FONT_STEP_PX = 0.5;
@@ -27,11 +27,15 @@ const ALERT_BEEP_INTERVAL_MS = 850;
 const ALERT_BEEP_MS = 260;
 const ALERT_BEEP_FREQ = 940;
 const ALERT_BEEP_GAIN = 0.23;
-const PRELOAD_LOOKAHEAD_MEDIA = 4;
+const PRELOAD_LOOKAHEAD_MEDIA = 2;
+const PRELOAD_VIDEO_LOOKAHEAD = 0;
 const PRELOAD_LOOKAHEAD_NEWS = 3;
 const PRELOAD_VIDEO_TIMEOUT_MS = 15000;
 const CLOUDINARY_DEFAULT_TAG = "signage";
 const CLOUDINARY_DEFAULT_MAX_ITEMS = 80;
+const CLOUDINARY_LIST_CACHE_MS = 10 * 60 * 1000;
+const CLOUDINARY_IMAGE_DELIVERY_TRANSFORM = "f_auto,q_auto:eco,w_1600,h_1600,c_limit";
+const CLOUDINARY_VIDEO_DELIVERY_TRANSFORM = "f_auto,q_auto:eco,w_1280,h_1280,c_limit";
 
 const mediaContainer = document.getElementById("media-container");
 const mediaFrameEl = document.querySelector(".media-frame");
@@ -48,6 +52,7 @@ let mediaIndex = 0;
 let mediaTimeoutId = null;
 let mediaStateSignature = "";
 let mediaRefreshInFlight = false;
+let cloudinaryPlaylistCache = { items: [], fetchedAt: 0 };
 
 let newsItems = [];
 let newsIndex = 0;
@@ -121,6 +126,103 @@ function normalizeCloudinaryConfig(value) {
     defaultImageDurationMs,
     maxItems
   };
+}
+
+function encodeCloudinaryPublicId(publicId) {
+  return String(publicId || "")
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
+function parseCloudinaryAssetInfo(src, fallbackType = "image") {
+  const value = String(src || "").trim();
+  if (!value.includes("/upload/")) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(value);
+    const hostParts = parsed.hostname.split(".");
+    if (hostParts.length < 3 || hostParts[0] !== "res" || hostParts[1] !== "cloudinary") {
+      return null;
+    }
+
+    const pathParts = parsed.pathname.split("/").filter(Boolean);
+    const uploadIndex = pathParts.findIndex((segment) => segment === "upload");
+    if (uploadIndex < 2 || uploadIndex >= pathParts.length - 1) {
+      return null;
+    }
+
+    const resourceType = pathParts[uploadIndex - 1] === "video" ? "video" : "image";
+    const versionIndex = pathParts.findIndex((segment, index) => index > uploadIndex && /^v\d+$/.test(segment));
+    if (versionIndex < 0 || versionIndex >= pathParts.length - 1) {
+      return null;
+    }
+
+    const publicSegments = pathParts.slice(versionIndex + 1).map((segment) => decodeURIComponent(segment));
+    if (!publicSegments.length) {
+      return null;
+    }
+
+    const lastPart = publicSegments[publicSegments.length - 1];
+    const extensionMatch = lastPart.match(/\.([a-z0-9]+)$/i);
+    if (extensionMatch) {
+      publicSegments[publicSegments.length - 1] = lastPart.slice(0, -extensionMatch[0].length);
+    }
+
+    return {
+      cloudName: pathParts[0] || "",
+      resourceType: fallbackType === "video" ? "video" : resourceType,
+      publicId: publicSegments.join("/"),
+      format: extensionMatch ? extensionMatch[1].toLowerCase() : "",
+      version: pathParts[versionIndex]
+    };
+  } catch {
+    return null;
+  }
+}
+
+function buildCloudinaryDeliveryUrl({ cloudName, resourceType, publicId, format, version }) {
+  const normalizedCloudName = String(cloudName || "").trim();
+  const normalizedPublicId = encodeCloudinaryPublicId(publicId);
+  if (!normalizedCloudName || !normalizedPublicId) {
+    return "";
+  }
+
+  const normalizedType = resourceType === "video" ? "video" : "image";
+  const transformation = normalizedType === "video"
+    ? CLOUDINARY_VIDEO_DELIVERY_TRANSFORM
+    : CLOUDINARY_IMAGE_DELIVERY_TRANSFORM;
+  const versionPart = String(version || "").trim();
+  const extension = String(format || "").trim() ? `.${encodeURIComponent(String(format).trim())}` : "";
+
+  return `https://res.cloudinary.com/${encodeURIComponent(normalizedCloudName)}/${normalizedType}/upload/${transformation}/${versionPart ? `${versionPart}/` : ""}${normalizedPublicId}${extension}`;
+}
+
+function getOptimizedCloudinarySrc({ src, type, publicId, format, version }) {
+  const normalizedType = type === "video" ? "video" : "image";
+  const directInfo = parseCloudinaryAssetInfo(src, normalizedType);
+  const assetInfo = directInfo || {
+    cloudName: cloudinaryConfig.cloudName,
+    resourceType: normalizedType,
+    publicId: String(publicId || "").trim(),
+    format: String(format || "").trim(),
+    version: String(version || "").trim()
+  };
+
+  if (!assetInfo.publicId || !assetInfo.cloudName) {
+    return "";
+  }
+
+  return buildCloudinaryDeliveryUrl({
+    cloudName: assetInfo.cloudName,
+    resourceType: assetInfo.resourceType,
+    publicId: assetInfo.publicId,
+    format: assetInfo.format || format,
+    version: assetInfo.version || version
+  });
 }
 
 function buildApiUrl(pathname) {
@@ -850,7 +952,7 @@ function preloadVideoAsset(url) {
 
   preloadingVideoUrls.add(src);
   const video = document.createElement("video");
-  video.preload = "auto";
+  video.preload = "metadata";
   video.muted = true;
   video.playsInline = true;
 
@@ -892,12 +994,17 @@ function preloadUpcomingMediaAssets() {
   }
 
   const count = Math.min(PRELOAD_LOOKAHEAD_MEDIA, mediaFiles.length);
+  let videoLookahead = 0;
   for (let i = 0; i < count; i += 1) {
     const item = mediaFiles[(mediaIndex + i) % mediaFiles.length];
     if (!item?.src) {
       continue;
     }
     if (item.type === "video") {
+      if (videoLookahead >= PRELOAD_VIDEO_LOOKAHEAD) {
+        continue;
+      }
+      videoLookahead += 1;
       preloadVideoAsset(item.src);
     } else {
       preloadImageAsset(item.src);
@@ -935,8 +1042,17 @@ function normalizeMediaItem(item) {
     ? srcInput
     : `media/${srcInput}`;
 
-  const normalized = {
+  const publicId = String(item?.publicId || "").trim();
+  const optimizedSrc = getOptimizedCloudinarySrc({
     src,
+    type,
+    publicId,
+    format: item?.format,
+    version: item?.version
+  });
+
+  const normalized = {
+    src: optimizedSrc || src,
     type,
     duration: Number(item.duration) || (type === "video" ? 0 : DEFAULT_IMAGE_MS)
   };
@@ -948,9 +1064,11 @@ function normalizeMediaItem(item) {
     }
   }
 
-  const publicId = String(item?.publicId || "").trim();
   if (publicId) {
     normalized.publicId = publicId;
+  }
+  if (item?.version) {
+    normalized.version = String(item.version).trim();
   }
 
   return normalized;
@@ -963,7 +1081,8 @@ function createMediaStateSignature(items) {
       String(item?.type || "").trim(),
       String(item?.duration || ""),
       String(item?.title || "").trim(),
-      String(item?.publicId || "").trim()
+      String(item?.publicId || "").trim(),
+      String(item?.version || "").trim()
     ].join("|"))
     .join("||");
 }
@@ -995,14 +1114,19 @@ async function fetchCloudinaryResourceList(resourceType) {
 
 function mapCloudinaryResource(resource, resourceType) {
   const format = String(resource?.format || "").toLowerCase();
-  const version = resource?.version ? `v${resource.version}/` : "";
+  const version = resource?.version ? `v${resource.version}` : "";
   const publicId = String(resource?.public_id || "").trim();
   if (!publicId) {
     return null;
   }
 
-  const source = resource?.secure_url
-    || `https://res.cloudinary.com/${encodeURIComponent(cloudinaryConfig.cloudName)}/${resourceType}/upload/${version}${publicId}.${format}`;
+  const source = buildCloudinaryDeliveryUrl({
+    cloudName: cloudinaryConfig.cloudName,
+    resourceType,
+    publicId,
+    format,
+    version
+  }) || String(resource?.secure_url || "").trim();
 
   const isVideo = resourceType === "video";
   const createdAtMs = Date.parse(resource?.created_at || "") || 0;
@@ -1011,6 +1135,8 @@ function mapCloudinaryResource(resource, resourceType) {
     src: source,
     type: isVideo ? "video" : "image",
     duration: isVideo ? 0 : cloudinaryConfig.defaultImageDurationMs,
+    publicId,
+    version,
     createdAtMs
   };
 }
@@ -1018,6 +1144,12 @@ function mapCloudinaryResource(resource, resourceType) {
 async function loadCloudinaryPlaylist() {
   if (!cloudinaryConfig.enabled) {
     return false;
+  }
+
+  const cacheAgeMs = Date.now() - cloudinaryPlaylistCache.fetchedAt;
+  if (cloudinaryPlaylistCache.items.length && cacheAgeMs < CLOUDINARY_LIST_CACHE_MS) {
+    mediaFiles = cloudinaryPlaylistCache.items.map((item) => ({ ...item }));
+    return true;
   }
 
   const [imagesResult, videosResult] = await Promise.allSettled([
@@ -1028,6 +1160,10 @@ async function loadCloudinaryPlaylist() {
   const videos = videosResult.status === "fulfilled" ? videosResult.value : [];
 
   if (imagesResult.status === "rejected" && videosResult.status === "rejected") {
+    if (cloudinaryPlaylistCache.items.length) {
+      mediaFiles = cloudinaryPlaylistCache.items.map((item) => ({ ...item }));
+      return true;
+    }
     throw imagesResult.reason || videosResult.reason || new Error("Cloudinary list failed");
   }
 
@@ -1038,6 +1174,10 @@ async function loadCloudinaryPlaylist() {
     .slice(0, cloudinaryConfig.maxItems)
     .map(({ createdAtMs, ...item }) => item);
 
+  cloudinaryPlaylistCache = {
+    items: combined.map((item) => ({ ...item })),
+    fetchedAt: Date.now()
+  };
   mediaFiles = combined;
   return true;
 }
@@ -1295,7 +1435,7 @@ function showMediaSlide() {
     video.autoplay = true;
     video.muted = true;
     video.playsInline = true;
-    video.preload = "auto";
+    video.preload = "metadata";
     video.disablePictureInPicture = true;
 
     const maxDuration = item.duration > 0 ? item.duration : DEFAULT_VIDEO_MAX_MS;

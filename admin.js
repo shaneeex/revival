@@ -11,6 +11,9 @@ const UPLOAD_TIMEOUT_MS = 15 * 60 * 1000;
 const DEFAULT_IMAGE_MS = 10000;
 const CLOUDINARY_DEFAULT_TAG = "signage";
 const CLOUDINARY_DEFAULT_MAX_ITEMS = 80;
+const CLOUDINARY_LIST_CACHE_MS = 10 * 60 * 1000;
+const CLOUDINARY_IMAGE_DELIVERY_TRANSFORM = "f_auto,q_auto:eco,w_1600,h_1600,c_limit";
+const CLOUDINARY_VIDEO_DELIVERY_TRANSFORM = "f_auto,q_auto:eco,w_1280,h_1280,c_limit";
 const MAX_CUSTOM_TICKER_ITEMS = 40;
 const MAX_CUSTOM_TICKER_ITEM_LENGTH = 160;
 
@@ -46,6 +49,7 @@ let customTickerItems = [];
 let playlistPersistence = { persistent: true, writable: true, storage: "unknown" };
 let settingsPersistence = { persistent: true, writable: true, storage: "unknown" };
 let uploadPopupTimerId = null;
+let cloudinaryFallbackCache = { items: [], fetchedAt: 0 };
 let cloudinaryConfig = {
   enabled: false,
   cloudName: "",
@@ -119,6 +123,103 @@ function normalizeCloudinaryConfig(value) {
   };
 }
 
+function encodeCloudinaryPublicId(publicId) {
+  return String(publicId || "")
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
+function parseCloudinaryAssetInfo(src, fallbackType = "image") {
+  const value = String(src || "").trim();
+  if (!value.includes("/upload/")) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(value);
+    const hostParts = parsed.hostname.split(".");
+    if (hostParts.length < 3 || hostParts[0] !== "res" || hostParts[1] !== "cloudinary") {
+      return null;
+    }
+
+    const pathParts = parsed.pathname.split("/").filter(Boolean);
+    const uploadIndex = pathParts.findIndex((segment) => segment === "upload");
+    if (uploadIndex < 2 || uploadIndex >= pathParts.length - 1) {
+      return null;
+    }
+
+    const resourceType = pathParts[uploadIndex - 1] === "video" ? "video" : "image";
+    const versionIndex = pathParts.findIndex((segment, index) => index > uploadIndex && /^v\d+$/.test(segment));
+    if (versionIndex < 0 || versionIndex >= pathParts.length - 1) {
+      return null;
+    }
+
+    const publicSegments = pathParts.slice(versionIndex + 1).map((segment) => decodeURIComponent(segment));
+    if (!publicSegments.length) {
+      return null;
+    }
+
+    const lastPart = publicSegments[publicSegments.length - 1];
+    const extensionMatch = lastPart.match(/\.([a-z0-9]+)$/i);
+    if (extensionMatch) {
+      publicSegments[publicSegments.length - 1] = lastPart.slice(0, -extensionMatch[0].length);
+    }
+
+    return {
+      cloudName: pathParts[0] || "",
+      resourceType: fallbackType === "video" ? "video" : resourceType,
+      publicId: publicSegments.join("/"),
+      format: extensionMatch ? extensionMatch[1].toLowerCase() : "",
+      version: pathParts[versionIndex]
+    };
+  } catch {
+    return null;
+  }
+}
+
+function buildCloudinaryDeliveryUrl({ cloudName, resourceType, publicId, format, version }) {
+  const normalizedCloudName = String(cloudName || "").trim();
+  const normalizedPublicId = encodeCloudinaryPublicId(publicId);
+  if (!normalizedCloudName || !normalizedPublicId) {
+    return "";
+  }
+
+  const normalizedType = resourceType === "video" ? "video" : "image";
+  const transformation = normalizedType === "video"
+    ? CLOUDINARY_VIDEO_DELIVERY_TRANSFORM
+    : CLOUDINARY_IMAGE_DELIVERY_TRANSFORM;
+  const versionPart = String(version || "").trim();
+  const extension = String(format || "").trim() ? `.${encodeURIComponent(String(format).trim())}` : "";
+
+  return `https://res.cloudinary.com/${encodeURIComponent(normalizedCloudName)}/${normalizedType}/upload/${transformation}/${versionPart ? `${versionPart}/` : ""}${normalizedPublicId}${extension}`;
+}
+
+function getOptimizedCloudinarySrc({ src, type, publicId, format, version }) {
+  const normalizedType = type === "video" ? "video" : "image";
+  const directInfo = parseCloudinaryAssetInfo(src, normalizedType);
+  const assetInfo = directInfo || {
+    cloudName: cloudinaryConfig.cloudName,
+    resourceType: normalizedType,
+    publicId: String(publicId || "").trim(),
+    format: String(format || "").trim(),
+    version: String(version || "").trim()
+  };
+
+  if (!assetInfo.publicId || !assetInfo.cloudName) {
+    return "";
+  }
+
+  return buildCloudinaryDeliveryUrl({
+    cloudName: assetInfo.cloudName,
+    resourceType: assetInfo.resourceType,
+    publicId: assetInfo.publicId,
+    format: assetInfo.format || format,
+    version: assetInfo.version || version
+  });
+}
+
 function normalizePlaylistItem(item) {
   const src = String(item?.src || item?.file || "").trim();
   if (!src) {
@@ -126,7 +227,15 @@ function normalizePlaylistItem(item) {
   }
 
   const type = String(item?.type || "").toLowerCase() === "video" ? "video" : "image";
-  const normalized = { src, type };
+  const publicId = String(item?.publicId || "").trim();
+  const optimizedSrc = getOptimizedCloudinarySrc({
+    src,
+    type,
+    publicId,
+    format: item?.format,
+    version: item?.version
+  });
+  const normalized = { src: optimizedSrc || src, type };
   if (type === "image") {
     normalized.duration = Math.max(1000, Number(item?.duration) || cloudinaryConfig.defaultImageDurationMs);
     const title = String(item?.title || "").trim();
@@ -135,9 +244,11 @@ function normalizePlaylistItem(item) {
     }
   }
 
-  const publicId = String(item?.publicId || "").trim();
   if (publicId) {
     normalized.publicId = publicId;
+  }
+  if (item?.version) {
+    normalized.version = String(item.version).trim();
   }
 
   return normalized;
@@ -171,15 +282,26 @@ function mapCloudinaryResourceToPlaylistItem(resource) {
     return null;
   }
 
+  const format = String(resource?.format || "").trim().toLowerCase();
+  const version = resource?.version ? `v${resource.version}` : "";
+  const optimizedSrc = buildCloudinaryDeliveryUrl({
+    cloudName: cloudinaryConfig.cloudName,
+    resourceType: type,
+    publicId,
+    format,
+    version
+  });
   const secureUrl = String(resource?.secure_url || "").trim();
-  if (!secureUrl) {
+  const src = optimizedSrc || secureUrl;
+  if (!src) {
     return null;
   }
 
   const item = {
-    src: secureUrl,
+    src,
     type,
     publicId,
+    version,
     createdAtMs: Date.parse(resource?.created_at || "") || 0
   };
 
@@ -190,9 +312,14 @@ function mapCloudinaryResourceToPlaylistItem(resource) {
   return item;
 }
 
-async function loadCloudinaryFallbackPlaylist() {
+async function loadCloudinaryFallbackPlaylist(forceRefresh = false) {
   if (!cloudinaryConfig.enabled) {
     return [];
+  }
+
+  const cacheAgeMs = Date.now() - cloudinaryFallbackCache.fetchedAt;
+  if (!forceRefresh && cloudinaryFallbackCache.items.length && cacheAgeMs < CLOUDINARY_LIST_CACHE_MS) {
+    return cloudinaryFallbackCache.items.map((item) => ({ ...item }));
   }
 
   const [imagesResult, videosResult] = await Promise.allSettled([
@@ -203,15 +330,24 @@ async function loadCloudinaryFallbackPlaylist() {
   const images = imagesResult.status === "fulfilled" ? imagesResult.value : [];
   const videos = videosResult.status === "fulfilled" ? videosResult.value : [];
   if (imagesResult.status === "rejected" && videosResult.status === "rejected") {
+    if (cloudinaryFallbackCache.items.length) {
+      return cloudinaryFallbackCache.items.map((item) => ({ ...item }));
+    }
     throw imagesResult.reason || videosResult.reason || new Error("Cloudinary fallback list unavailable");
   }
 
-  return [...images, ...videos]
+  const items = [...images, ...videos]
     .map(mapCloudinaryResourceToPlaylistItem)
     .filter(Boolean)
     .sort((a, b) => b.createdAtMs - a.createdAtMs)
     .slice(0, cloudinaryConfig.maxItems)
     .map(({ createdAtMs, ...item }) => item);
+
+  cloudinaryFallbackCache = {
+    items: items.map((item) => ({ ...item })),
+    fetchedAt: Date.now()
+  };
+  return items;
 }
 
 function parseBooleanValue(value) {
@@ -577,7 +713,8 @@ async function saveSettingsPatch(patch, successMessage = "") {
   }
 }
 
-async function loadPlaylist() {
+async function loadPlaylist(options = {}) {
+  const forceCloudinaryRefresh = options.forceCloudinaryRefresh === true;
   let payload = null;
   try {
     payload = await requestJson(buildNoCacheApiUrl(PLAYLIST_API_URL), { cache: "no-store" });
@@ -599,7 +736,7 @@ async function loadPlaylist() {
 
   if (!playlist.length) {
     try {
-      const cloudinaryItems = await loadCloudinaryFallbackPlaylist();
+      const cloudinaryItems = await loadCloudinaryFallbackPlaylist(forceCloudinaryRefresh);
       if (cloudinaryItems.length) {
         playlist = cloudinaryItems.map(normalizePlaylistItem).filter(Boolean);
         playlistPersistence = {
@@ -884,8 +1021,16 @@ async function getUploadSignature(resourceType) {
 
 function mapCloudinaryUploadToPlaylistItem(payload, fallbackType, imageTitle) {
   const type = String(payload?.resource_type || fallbackType || "").toLowerCase() === "video" ? "video" : "image";
-  const src = String(payload?.secure_url || "").trim();
   const publicId = String(payload?.public_id || "").trim();
+  const version = payload?.version ? `v${payload.version}` : "";
+  const format = String(payload?.format || "").trim().toLowerCase();
+  const src = getOptimizedCloudinarySrc({
+    src: payload?.secure_url,
+    type,
+    publicId,
+    format,
+    version
+  }) || String(payload?.secure_url || "").trim();
   if (!src) {
     return null;
   }
@@ -893,6 +1038,9 @@ function mapCloudinaryUploadToPlaylistItem(payload, fallbackType, imageTitle) {
   const item = { src, type };
   if (publicId) {
     item.publicId = publicId;
+  }
+  if (version) {
+    item.version = version;
   }
   if (type === "image") {
     item.duration = cloudinaryConfig.defaultImageDurationMs;
@@ -1147,7 +1295,7 @@ uploadCloudinaryBtn.addEventListener("click", handleUploadClick);
 if (refreshCloudinaryBtn) {
   refreshCloudinaryBtn.addEventListener("click", async () => {
     try {
-      await loadPlaylist();
+      await loadPlaylist({ forceCloudinaryRefresh: true });
       renderPlaylist();
       showStatus("Content list reloaded.");
     } catch (error) {
